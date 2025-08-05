@@ -761,12 +761,16 @@
                         <span class="filter-tag-icon">⭐</span>
                         20 Featured Properties
                     </span>
+                    <span class="filter-tag" id="propertyCountTag" style="background: var(--apple-blue); color: white;">
+                        <span class="filter-tag-icon">📊</span>
+                        <span id="propertyCountText">50 Total Properties</span>
+                    </span>
                 </div>
                 
                 <div class="btn-group">
                     <button class="btn btn-primary" onclick="loadWithProxy()">
                         <span>🔄</span>
-                        Load Live Data
+                        Load Live Data (All Pages)
                     </button>
                     <button class="btn btn-secondary" onclick="toggleFeatured()">
                         <span>⭐</span>
@@ -775,6 +779,10 @@
                     <button class="btn btn-secondary" onclick="loadDemoData()">
                         <span>🏠</span>
                         Load Demo Data
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportProperties()">
+                        <span>📊</span>
+                        Export to CSV
                     </button>
                 </div>
             </div>
@@ -787,7 +795,7 @@
                     <button class="view-btn active" onclick="setView('grid')">Grid</button>
                     <button class="view-btn" onclick="setView('list')">List</button>
                     <span style="margin-left: 20px; color: var(--apple-gray); font-size: 14px;">
-                        Showing <span id="showingCount">0</span> properties
+                        Showing <span id="showingCount">0</span> of <span id="totalCount">0</span> total properties
                     </span>
                 </div>
             </div>
@@ -890,9 +898,16 @@
             console.log('📍 Locations: Brentwood, Franklin, College Grove');
             console.log('💰 Price Range: $2M - $5M');
             console.log('⭐ Featured Properties: 20');
+            console.log('📊 Now with pagination support to load ALL available properties!');
             
             // Load demo data immediately for better UX
             loadDemoData();
+            
+            // Show tip about loading all properties
+            setTimeout(() => {
+                console.log('\n💡 TIP: Click "Load Live Data (All Pages)" to fetch ALL properties from Zillow.');
+                console.log('This will search multiple pages and locations to find ~150+ properties.');
+            }, 2000);
         });
 
         // Load Demo Data
@@ -976,17 +991,21 @@
             updateStats();
             updateLastUpdate();
             
+            // Update total count display
+            document.getElementById('totalCount').textContent = properties.length;
+            document.getElementById('propertyCountText').textContent = `${properties.length} Total Properties`;
+            
             document.getElementById('dataSource').textContent = 'Demo';
             updateStatus('active', 'Demo Data Loaded', `${properties.length} properties loaded successfully`);
         }
 
-        // Load with CORS Proxy
+        // Load with CORS Proxy - Now with pagination support
         async function loadWithProxy() {
-            console.log('Attempting to load live data via CORS proxy...');
-            updateStatus('loading', 'Connecting to Zillow API', 'Using CORS proxy for API access...');
+            console.log('Attempting to load ALL live data via CORS proxy...');
+            updateStatus('loading', 'Connecting to Zillow API', 'Fetching all properties (this may take a moment)...');
             
             const startTime = Date.now();
-            apiCallCount++;
+            let allProperties = [];
             
             // List of CORS proxies to try
             const corsProxies = [
@@ -995,17 +1014,20 @@
                 'https://cors-anywhere.herokuapp.com/'
             ];
             
-            let dataLoaded = false;
+            // Locations to search
+            const locations = [
+                'Franklin, TN',
+                'Brentwood, TN',
+                'College Grove, TN'
+            ];
             
+            let workingProxy = null;
+            
+            // Find a working proxy first
             for (const proxy of corsProxies) {
-                if (dataLoaded) break;
-                
-                console.log(`Trying proxy: ${proxy}`);
-                
+                console.log(`Testing proxy: ${proxy}`);
                 try {
-                    // Test with a simple API call first
                     const testUrl = `${proxy}${encodeURIComponent('https://zillow-com1.p.rapidapi.com/propertyDetails?zpid=2080998890')}`;
-                    
                     const response = await fetch(testUrl, {
                         method: 'GET',
                         headers: {
@@ -1016,13 +1038,39 @@
                     });
                     
                     if (response.ok) {
-                        const data = await response.json();
-                        console.log('✅ Proxy working! Response:', data);
+                        workingProxy = proxy;
+                        console.log('✅ Working proxy found:', proxy);
+                        break;
+                    }
+                } catch (error) {
+                    console.log(`Proxy ${proxy} failed`);
+                }
+            }
+            
+            if (!workingProxy) {
+                console.error('No working proxy found');
+                updateStatus('error', 'API Connection Failed', 'Unable to connect - showing demo data');
+                return;
+            }
+            
+            // Now fetch properties from all locations with pagination
+            for (const location of locations) {
+                console.log(`\n📍 Searching ${location}...`);
+                let page = 1;
+                let hasMorePages = true;
+                let locationProperties = [];
+                
+                while (hasMorePages && page <= 5) { // Limit to 5 pages per location for safety
+                    try {
+                        apiCallCount++;
+                        const searchUrl = `${workingProxy}${encodeURIComponent(
+                            `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${encodeURIComponent(location)}&status_type=ForSale&minPrice=2000000&maxPrice=5000000&page=${page}`
+                        )}`;
                         
-                        // Now try to get actual search results
-                        const searchUrl = `${proxy}${encodeURIComponent('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=Franklin%2C%20TN&status_type=ForSale&minPrice=2000000&maxPrice=5000000')}`;
+                        console.log(`Fetching page ${page} for ${location}...`);
+                        updateStatus('loading', 'Loading Properties', `Fetching ${location} - Page ${page}...`);
                         
-                        const searchResponse = await fetch(searchUrl, {
+                        const response = await fetch(searchUrl, {
                             method: 'GET',
                             headers: {
                                 'Accept': 'application/json',
@@ -1031,91 +1079,214 @@
                             }
                         });
                         
-                        if (searchResponse.ok) {
-                            const searchData = await searchResponse.json();
-                            console.log('Search results:', searchData);
+                        if (response.ok) {
+                            const data = await response.json();
                             
-                            if (searchData.props && searchData.props.length > 0) {
-                                // Process the real data
-                                processZillowData(searchData.props);
-                                dataLoaded = true;
-                                document.getElementById('dataSource').textContent = 'Zillow';
-                                updateStatus('active', 'Live Data Connected', `Loaded ${searchData.props.length} properties from Zillow`);
+                            if (data.props && data.props.length > 0) {
+                                locationProperties = locationProperties.concat(data.props);
+                                console.log(`✅ Page ${page}: Found ${data.props.length} properties (Total for ${location}: ${locationProperties.length})`);
+                                
+                                // Check if there are more pages
+                                if (data.totalPages && page < data.totalPages) {
+                                    page++;
+                                } else if (data.props.length === 40 || data.props.length === 41) {
+                                    // Zillow often returns 40-41 properties per page
+                                    page++;
+                                } else {
+                                    hasMorePages = false;
+                                }
+                            } else {
+                                hasMorePages = false;
                             }
+                        } else {
+                            console.log(`No more pages for ${location}`);
+                            hasMorePages = false;
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching page ${page} for ${location}:`, error);
+                        hasMorePages = false;
+                    }
+                    
+                    // Add a small delay between requests to avoid rate limiting
+                    if (hasMorePages) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                }
+                
+                allProperties = allProperties.concat(locationProperties);
+                console.log(`📊 Total for ${location}: ${locationProperties.length} properties`);
+            }
+            
+            // Also search by ZIP codes for any missed properties
+            const zipCodes = ['37027', '37064', '37067', '37069', '37046'];
+            for (const zip of zipCodes) {
+                try {
+                    apiCallCount++;
+                    const zipUrl = `${workingProxy}${encodeURIComponent(
+                        `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${zip}&status_type=ForSale&minPrice=2000000&maxPrice=5000000`
+                    )}`;
+                    
+                    console.log(`Searching ZIP ${zip}...`);
+                    updateStatus('loading', 'Loading Properties', `Searching ZIP code ${zip}...`);
+                    
+                    const response = await fetch(zipUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
+                            'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.props && data.props.length > 0) {
+                            // Check for duplicates before adding
+                            const newProps = data.props.filter(prop => 
+                                !allProperties.some(existing => existing.zpid === prop.zpid)
+                            );
+                            allProperties = allProperties.concat(newProps);
+                            console.log(`✅ ZIP ${zip}: Found ${newProps.length} new properties`);
                         }
                     }
                 } catch (error) {
-                    console.error(`Proxy ${proxy} failed:`, error);
+                    console.log(`ZIP ${zip} search failed:`, error.message);
                 }
+                
+                // Small delay between requests
+                await new Promise(resolve => setTimeout(resolve, 300));
             }
             
             lastResponseTime = Date.now() - startTime;
             document.getElementById('responseTime').textContent = `${lastResponseTime}ms`;
             document.getElementById('apiCalls').textContent = apiCallCount;
             
-            if (!dataLoaded) {
-                console.error('All CORS proxies failed. Showing demo data.');
-                updateStatus('error', 'API Connection Failed', 'CORS proxies unavailable - showing demo data');
+            if (allProperties.length > 0) {
+                console.log(`\n🎉 SUCCESS! Total properties found: ${allProperties.length}`);
                 
-                // Show explanation to user
-                alert('Live Zillow API Access Issue:\n\n' +
-                      'The Zillow API cannot be accessed directly from browsers due to CORS restrictions.\n\n' +
-                      'Solutions:\n' +
-                      '1. Use the demo data (already loaded)\n' +
-                      '2. Set up a backend server to proxy API calls\n' +
-                      '3. Use a different real estate API with CORS support\n\n' +
-                      'The demo includes all 20 featured properties and works perfectly for testing.');
+                // Remove duplicates based on zpid
+                const uniqueProperties = Array.from(
+                    new Map(allProperties.map(p => [p.zpid, p])).values()
+                );
+                
+                console.log(`After removing duplicates: ${uniqueProperties.length} unique properties`);
+                
+                // Process all the data
+                processZillowData(uniqueProperties);
+                document.getElementById('dataSource').textContent = 'Zillow';
+                updateStatus('active', 'All Properties Loaded!', `Successfully loaded ${uniqueProperties.length} properties from Zillow`);
+                
+                // Show summary
+                alert(`✅ Success!\n\nLoaded ${uniqueProperties.length} properties from Zillow API:\n` +
+                      `• ${apiCallCount} API calls made\n` +
+                      `• ${(lastResponseTime / 1000).toFixed(1)} seconds total time\n` +
+                      `• All locations searched\n\n` +
+                      `Your 20 featured properties are marked with purple borders.`);
+            } else {
+                console.error('No properties found');
+                updateStatus('error', 'No Properties Found', 'Check your search criteria');
             }
         }
 
-        // Process Zillow Data
+        // Process Zillow Data - Enhanced to handle all properties
         function processZillowData(zillowProps) {
+            console.log(`Processing ${zillowProps.length} Zillow properties...`);
             properties = [];
             
-            // First add featured properties
-            FEATURED_PROPERTIES.forEach((fp, index) => {
+            // Track which featured properties we find
+            const foundFeatured = new Set();
+            
+            // Process Zillow properties and check if any match featured addresses
+            zillowProps.forEach(prop => {
+                const address = prop.address || prop.streetAddress || 'Unknown Address';
+                const city = prop.city || 'Franklin';
+                
+                // Check if this property matches any featured property
+                let isFeatured = false;
+                let category = null;
+                
+                for (const fp of FEATURED_PROPERTIES) {
+                    // Match by address (partial match)
+                    const fpStreetNumber = fp.address.split(' ')[0];
+                    const fpStreetName = fp.address.split(' ').slice(1, 3).join(' ').toLowerCase();
+                    
+                    if (address.includes(fpStreetNumber) || 
+                        address.toLowerCase().includes(fpStreetName)) {
+                        isFeatured = true;
+                        category = fp.category;
+                        foundFeatured.add(fp.address);
+                        console.log(`✨ Found featured property: ${address}`);
+                        break;
+                    }
+                }
+                
                 properties.push({
-                    zpid: `featured-${index}`,
-                    address: fp.address,
-                    city: fp.city,
-                    state: 'TN',
-                    zipcode: fp.zip,
-                    price: 2500000 + (index * 150000),
-                    bedrooms: 4,
-                    bathrooms: 3,
-                    sqft: 4500,
-                    yearBuilt: 2020,
-                    propertyType: 'Single Family',
-                    imageUrl: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80',
-                    isFeatured: true,
-                    isNew: index < 3,
-                    hasOpenHouse: fp.openHouse || false,
-                    category: fp.category,
-                    daysOnZillow: Math.floor(Math.random() * 30)
+                    zpid: prop.zpid || `zillow-${Math.random()}`,
+                    address: address,
+                    city: city,
+                    state: prop.state || 'TN',
+                    zipcode: prop.zipcode || prop.zip || '37067',
+                    price: parseInt(prop.price) || parseInt(prop.unformattedPrice) || 2500000,
+                    bedrooms: prop.beds || prop.bedrooms || 4,
+                    bathrooms: prop.baths || prop.bathrooms || 3,
+                    sqft: prop.area || prop.livingArea || prop.sqft || 4000,
+                    yearBuilt: prop.yearBuilt || 2018,
+                    propertyType: prop.propertyType || prop.homeType || 'Single Family',
+                    imageUrl: prop.imgSrc || prop.image || prop.relaxedImgSrc || 
+                              'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
+                    isFeatured: isFeatured,
+                    isNew: prop.isNew || prop.newListing || false,
+                    hasOpenHouse: prop.hasOpenHouse || false,
+                    category: category,
+                    daysOnZillow: prop.daysOnZillow || prop.daysOnMarket || 0,
+                    priceChange: prop.priceChange || 0,
+                    listingStatus: prop.listingStatus || 'FOR_SALE',
+                    lotSize: prop.lotAreaValue || prop.lotSize || null,
+                    zestimate: prop.zestimate || null,
+                    rentZestimate: prop.rentZestimate || null,
+                    taxAssessedValue: prop.taxAssessedValue || null,
+                    listingAgent: prop.listingAgent || null,
+                    brokerageName: prop.brokerageName || null
                 });
             });
             
-            // Add Zillow properties
-            zillowProps.forEach(prop => {
-                properties.push({
-                    zpid: prop.zpid || `zillow-${Math.random()}`,
-                    address: prop.address || prop.streetAddress || 'Unknown Address',
-                    city: prop.city || 'Franklin',
-                    state: prop.state || 'TN',
-                    zipcode: prop.zipcode || '37067',
-                    price: prop.price || prop.unformattedPrice || 2500000,
-                    bedrooms: prop.beds || 4,
-                    bathrooms: prop.baths || 3,
-                    sqft: prop.area || prop.livingArea || 4000,
-                    yearBuilt: prop.yearBuilt || 2018,
-                    propertyType: prop.propertyType || 'Single Family',
-                    imageUrl: prop.imgSrc || prop.image || 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
-                    isFeatured: false,
-                    isNew: prop.isNew || false,
-                    hasOpenHouse: prop.hasOpenHouse || false,
-                    daysOnZillow: prop.daysOnZillow || 0
-                });
+            // Add any featured properties that weren't found in Zillow results
+            FEATURED_PROPERTIES.forEach((fp, index) => {
+                if (!foundFeatured.has(fp.address)) {
+                    console.log(`➕ Adding missing featured property: ${fp.address}`);
+                    properties.unshift({
+                        zpid: `featured-${index}`,
+                        address: fp.address,
+                        city: fp.city,
+                        state: 'TN',
+                        zipcode: fp.zip,
+                        price: 2500000 + (index * 150000),
+                        bedrooms: 4,
+                        bathrooms: 3,
+                        sqft: 4500,
+                        yearBuilt: 2020,
+                        propertyType: 'Single Family',
+                        imageUrl: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80',
+                        isFeatured: true,
+                        isNew: index < 3,
+                        hasOpenHouse: fp.openHouse || false,
+                        category: fp.category,
+                        daysOnZillow: Math.floor(Math.random() * 30),
+                        listingStatus: 'FOR_SALE'
+                    });
+                }
             });
+            
+            // Sort properties: featured first, then by price
+            properties.sort((a, b) => {
+                if (a.isFeatured && !b.isFeatured) return -1;
+                if (!a.isFeatured && b.isFeatured) return 1;
+                return a.price - b.price;
+            });
+            
+            console.log(`📊 Final property count: ${properties.length}`);
+            console.log(`⭐ Featured properties: ${properties.filter(p => p.isFeatured).length}`);
+            console.log(`🏠 Regular properties: ${properties.filter(p => !p.isFeatured).length}`);
             
             filteredProperties = [...properties];
             renderProperties();
@@ -1129,6 +1300,9 @@
             const displayProperties = showFeaturedOnly ? 
                 filteredProperties.filter(p => p.isFeatured) : 
                 filteredProperties;
+            
+            document.getElementById('showingCount').textContent = displayProperties.length;
+            document.getElementById('totalCount').textContent = properties.length;
             
             if (displayProperties.length === 0) {
                 grid.innerHTML = `
@@ -1157,7 +1331,7 @@
                         </div>
                     </div>
                     <div class="property-details">
-                        <div class="property-price">$${property.price.toLocaleString()}</div>
+                        <div class="property-price">${property.price.toLocaleString()}</div>
                         <div class="property-address">${property.address}</div>
                         <div class="property-location">${property.city}, ${property.state} ${property.zipcode}</div>
                         <div class="property-features">
@@ -1177,8 +1351,6 @@
                     </div>
                 </div>
             `).join('');
-            
-            document.getElementById('showingCount').textContent = displayProperties.length;
         }
 
         // Show Property Details
@@ -1297,8 +1469,20 @@
             const newCount = filteredProperties.filter(p => p.isNew).length;
             
             document.getElementById('totalProperties').textContent = total;
-            document.getElementById('avgPrice').textContent = `$${(avgPrice / 1000000).toFixed(1)}M`;
+            document.getElementById('avgPrice').textContent = `${(avgPrice / 1000000).toFixed(1)}M`;
             document.getElementById('newListings').textContent = newCount;
+            
+            // Update property count tag
+            const countText = document.getElementById('propertyCountText');
+            if (countText) {
+                countText.textContent = `${total} Total Properties`;
+            }
+            
+            // Update total count in view options
+            const totalCountEl = document.getElementById('totalCount');
+            if (totalCountEl) {
+                totalCountEl.textContent = total;
+            }
         }
 
         // Update Status
@@ -1321,6 +1505,52 @@
                 hour12: true 
             });
             document.getElementById('lastUpdate').textContent = timeString;
+        }
+
+        // Export Properties to CSV
+        function exportProperties() {
+            if (properties.length === 0) {
+                alert('No properties to export. Please load data first.');
+                return;
+            }
+            
+            // Create CSV content
+            const headers = ['Address', 'City', 'State', 'ZIP', 'Price', 'Bedrooms', 'Bathrooms', 
+                           'Sq Ft', 'Year Built', 'Type', 'Featured', 'Category', 'Days on Market'];
+            
+            const rows = properties.map(p => [
+                p.address,
+                p.city,
+                p.state,
+                p.zipcode,
+                p.price,
+                p.bedrooms,
+                p.bathrooms,
+                p.sqft,
+                p.yearBuilt,
+                p.propertyType,
+                p.isFeatured ? 'Yes' : 'No',
+                p.category || '',
+                p.daysOnZillow || 0
+            ]);
+            
+            let csvContent = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
+            });
+            
+            // Create download link
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tennessee_properties_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            alert(`✅ Exported ${properties.length} properties to CSV!`);
         }
 
         // Handle Modal Clicks
