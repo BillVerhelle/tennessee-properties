@@ -911,33 +911,48 @@
 
         // Initialize Application
         async function init() {
-            console.log('====================================');
-            console.log('🏠 ZILLOW API INTEGRATION STARTING');
-            console.log('====================================');
-            console.log('API Key:', API_CONFIG.headers['x-rapidapi-key'].substring(0, 10) + '...');
-            console.log('Target locations: Brentwood, Franklin, College Grove, TN');
-            console.log('Price range: $2M - $5M');
-            console.log('------------------------------------\n');
-            
-            updateStatus('loading', 'Connecting to Zillow API', 'Fetching luxury properties in Tennessee...');
-            
-            // Try to get real data first
-            console.log('📡 Attempting to fetch real Zillow data...');
-            const realDataLoaded = await attemptRealDataLoad();
-            
-            if (!realDataLoaded) {
-                console.log('⚠️ Real data not available, loading enhanced demo data...');
-                await loadProperties();
+            try {
+                console.log('====================================');
+                console.log('🏠 INITIALIZING PROPERTY SEARCH');
+                console.log('====================================');
+                console.log('API Key:', API_CONFIG.headers['x-rapidapi-key'].substring(0, 10) + '...');
+                console.log('Target locations: Brentwood, Franklin, College Grove, TN');
+                console.log('Price range: $2M - $5M');
+                console.log('------------------------------------\n');
+                
+                updateStatus('loading', 'Connecting to Zillow API', 'Fetching luxury properties in Tennessee...');
+                
+                // Try to get real data first
+                console.log('📡 Attempting to fetch real Zillow data...');
+                const realDataLoaded = await attemptRealDataLoad();
+                
+                if (!realDataLoaded) {
+                    console.log('⚠️ Real data not available, loading enhanced demo data...');
+                    // Ensure we always load something
+                    properties = generateEnhancedMockData();
+                    filteredProperties = [...properties];
+                    renderProperties();
+                    updateStats();
+                    updateStatus('active', 'Demo Mode', 'Displaying sample properties with your featured listings');
+                }
+                
+                updateLastUpdate();
+                
+                // Show instructions to user
+                console.log('\n📌 INSTRUCTIONS:');
+                console.log('1. Click "Test API Connection" to diagnose API issues');
+                console.log('2. Click "Update Search Now" to refresh data');
+                console.log('3. Your featured properties are marked with purple borders');
+                
+            } catch (error) {
+                console.error('❌ Initialization error:', error);
+                // Even if there's an error, show demo data
+                properties = generateEnhancedMockData();
+                filteredProperties = [...properties];
+                renderProperties();
+                updateStats();
+                updateStatus('error', 'Initialization Error', 'Displaying demo properties');
             }
-            
-            updateLastUpdate();
-            
-            // Show instructions to user
-            console.log('\n📌 INSTRUCTIONS FOR ACTIVATING REAL DATA:');
-            console.log('1. Click "Test API Connection" button to diagnose API');
-            console.log('2. Click "Update Search Now" to force refresh');
-            console.log('3. Check console (F12) for detailed API responses');
-            console.log('4. If API returns data, it will automatically display');
         }
         
         // Attempt to load real data with multiple strategies
@@ -1037,13 +1052,23 @@
 
         // Update API Status
         function updateStatus(type, title, subtitle) {
-            const indicator = document.getElementById('statusIndicator');
-            const statusTitle = document.getElementById('statusTitle');
-            const statusSubtitle = document.getElementById('statusSubtitle');
-            
-            indicator.className = `status-indicator ${type}`;
-            statusTitle.textContent = title;
-            statusSubtitle.textContent = subtitle;
+            try {
+                const indicator = document.getElementById('statusIndicator');
+                const statusTitle = document.getElementById('statusTitle');
+                const statusSubtitle = document.getElementById('statusSubtitle');
+                
+                if (indicator) {
+                    indicator.className = `status-indicator ${type}`;
+                }
+                if (statusTitle) {
+                    statusTitle.textContent = title;
+                }
+                if (statusSubtitle) {
+                    statusSubtitle.textContent = subtitle;
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
         }
 
         // Load Properties with Enhanced Error Handling
@@ -1103,9 +1128,13 @@
                 apiCallCount++;
                 
                 // Update metrics
-                document.getElementById('apiCalls').textContent = apiCallCount;
-                document.getElementById('responseTime').textContent = `${lastResponseTime}ms`;
-                document.getElementById('dataQuality').textContent = properties.length > 0 ? '100%' : '0%';
+                const apiCallsEl = document.getElementById('apiCalls');
+                const responseTimeEl = document.getElementById('responseTime');
+                const dataQualityEl = document.getElementById('dataQuality');
+                
+                if (apiCallsEl) apiCallsEl.textContent = apiCallCount;
+                if (responseTimeEl) responseTimeEl.textContent = `${lastResponseTime}ms`;
+                if (dataQualityEl) dataQualityEl.textContent = properties.length > 0 ? '100%' : '0%';
                 
                 filteredProperties = [...properties];
                 renderProperties();
@@ -1436,95 +1465,124 @@
 
         // Render Properties
         function renderProperties() {
-            const grid = document.getElementById('propertyGrid');
-            const displayProperties = showFeaturedOnly ? 
-                filteredProperties.filter(p => p.isFeatured) : 
-                filteredProperties;
-            
-            if (displayProperties.length === 0) {
-                grid.innerHTML = `
-                    <div class="loading-container">
-                        <div class="loading-text">No properties found matching your criteria</div>
+            try {
+                const grid = document.getElementById('propertyGrid');
+                if (!grid) {
+                    console.error('Property grid element not found');
+                    return;
+                }
+                
+                const displayProperties = showFeaturedOnly ? 
+                    filteredProperties.filter(p => p.isFeatured) : 
+                    filteredProperties;
+                
+                if (displayProperties.length === 0) {
+                    grid.innerHTML = `
+                        <div class="loading-container">
+                            <div class="loading-text">No properties found matching your criteria</div>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                grid.innerHTML = displayProperties.map(property => `
+                    <div class="property-card ${property.isFeatured ? 'featured' : ''}" onclick="showPropertyDetails('${property.zpid}')">
+                        <div class="property-image-container">
+                            <img 
+                                src="${property.imageUrl || 'https://photos.zillowstatic.com/fp/placeholder_cc.jpg'}" 
+                                alt="${property.address}"
+                                class="property-image"
+                                loading="lazy"
+                                onerror="this.src='https://via.placeholder.com/400x280/f5f5f7/86868b?text=Property+Image'"
+                            >
+                            <div class="property-badges">
+                                ${property.isFeatured ? '<span class="badge badge-featured">Featured</span>' : ''}
+                                ${property.isNew ? '<span class="badge badge-new">New</span>' : ''}
+                                ${property.hasOpenHouse ? '<span class="badge badge-open-house">Open House</span>' : ''}
+                                ${property.category ? `<span class="badge badge-premium">${property.category}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="property-details">
+                            <div class="property-price">
+                                ${property.price.toLocaleString()}
+                                ${property.priceChange ? `
+                                    <span style="font-size: 14px; color: ${property.priceChange > 0 ? 'var(--apple-red)' : 'var(--apple-green)'}">
+                                        ${property.priceChange > 0 ? '↑' : '↓'} ${Math.abs(property.priceChange).toLocaleString()}
+                                    </span>
+                                ` : ''}
+                            </div>
+                            <div class="property-address">${property.address}</div>
+                            <div class="property-location">${property.city}, ${property.state} ${property.zipcode}</div>
+                            <div class="property-features">
+                                <div class="feature">
+                                    <span class="feature-icon">🛏</span>
+                                    <span>${property.bedrooms} beds</span>
+                                </div>
+                                <div class="feature">
+                                    <span class="feature-icon">🚿</span>
+                                    <span>${property.bathrooms} baths</span>
+                                </div>
+                                <div class="feature">
+                                    <span class="feature-icon">📐</span>
+                                    <span>${property.sqft.toLocaleString()} sqft</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                `;
-                return;
+                `).join('');
+                
+                console.log(`Rendered ${displayProperties.length} properties`);
+                
+            } catch (error) {
+                console.error('Error rendering properties:', error);
             }
-            
-            grid.innerHTML = displayProperties.map(property => `
-                <div class="property-card ${property.isFeatured ? 'featured' : ''}" onclick="showPropertyDetails('${property.zpid}')">
-                    <div class="property-image-container">
-                        <img 
-                            src="${property.imageUrl || 'https://photos.zillowstatic.com/fp/placeholder_cc.jpg'}" 
-                            alt="${property.address}"
-                            class="property-image"
-                            loading="lazy"
-                            onerror="this.src='https://via.placeholder.com/400x280/f5f5f7/86868b?text=Property+Image'"
-                        >
-                        <div class="property-badges">
-                            ${property.isFeatured ? '<span class="badge badge-featured">Featured</span>' : ''}
-                            ${property.isNew ? '<span class="badge badge-new">New</span>' : ''}
-                            ${property.hasOpenHouse ? '<span class="badge badge-open-house">Open House</span>' : ''}
-                            ${property.category ? `<span class="badge badge-premium">${property.category}</span>` : ''}
-                        </div>
-                    </div>
-                    <div class="property-details">
-                        <div class="property-price">
-                            $${property.price.toLocaleString()}
-                            ${property.priceChange ? `
-                                <span style="font-size: 14px; color: ${property.priceChange > 0 ? 'var(--apple-red)' : 'var(--apple-green)'}">
-                                    ${property.priceChange > 0 ? '↑' : '↓'} $${Math.abs(property.priceChange).toLocaleString()}
-                                </span>
-                            ` : ''}
-                        </div>
-                        <div class="property-address">${property.address}</div>
-                        <div class="property-location">${property.city}, ${property.state} ${property.zipcode}</div>
-                        <div class="property-features">
-                            <div class="feature">
-                                <span class="feature-icon">🛏</span>
-                                <span>${property.bedrooms} beds</span>
-                            </div>
-                            <div class="feature">
-                                <span class="feature-icon">🚿</span>
-                                <span>${property.bathrooms} baths</span>
-                            </div>
-                            <div class="feature">
-                                <span class="feature-icon">📐</span>
-                                <span>${property.sqft.toLocaleString()} sqft</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
         }
 
         // Update Statistics
         function updateStats() {
-            const totalElement = document.getElementById('totalProperties');
-            const avgElement = document.getElementById('avgPrice');
-            const newElement = document.getElementById('newListings');
-            
-            totalElement.textContent = filteredProperties.length;
-            
-            if (filteredProperties.length > 0) {
-                const avgPrice = filteredProperties.reduce((sum, p) => sum + p.price, 0) / filteredProperties.length;
-                avgElement.textContent = `$${(avgPrice / 1000000).toFixed(1)}M`;
-            } else {
-                avgElement.textContent = '$0M';
+            try {
+                const totalElement = document.getElementById('totalProperties');
+                const avgElement = document.getElementById('avgPrice');
+                const newElement = document.getElementById('newListings');
+                
+                if (totalElement) {
+                    totalElement.textContent = filteredProperties.length;
+                }
+                
+                if (avgElement) {
+                    if (filteredProperties.length > 0) {
+                        const avgPrice = filteredProperties.reduce((sum, p) => sum + p.price, 0) / filteredProperties.length;
+                        avgElement.textContent = `${(avgPrice / 1000000).toFixed(1)}M`;
+                    } else {
+                        avgElement.textContent = '$0M';
+                    }
+                }
+                
+                if (newElement) {
+                    const newCount = filteredProperties.filter(p => p.isNew).length;
+                    newElement.textContent = newCount;
+                }
+            } catch (error) {
+                console.error('Error updating stats:', error);
             }
-            
-            const newCount = filteredProperties.filter(p => p.isNew).length;
-            newElement.textContent = newCount;
         }
 
         // Update Last Update Time
         function updateLastUpdate() {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString('en-US', { 
-                hour: 'numeric', 
-                minute: '2-digit',
-                hour12: true 
-            });
-            document.getElementById('lastUpdate').textContent = timeString;
+            try {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true 
+                });
+                const element = document.getElementById('lastUpdate');
+                if (element) {
+                    element.textContent = timeString;
+                }
+            } catch (error) {
+                console.error('Error updating last update time:', error);
+            }
         }
 
         // Show Property Details
@@ -1907,7 +1965,7 @@
 
         // Initialize application
         document.addEventListener('DOMContentLoaded', () => {
-            console.clear(); // Clear console for fresh start
+            // Remove console.clear as it's not supported in all environments
             console.log('====================================');
             console.log('🏠 ZILLOW REAL ESTATE PLATFORM');
             console.log('====================================');
@@ -1988,15 +2046,20 @@
                 } else {
                     console.log('⚠️ API works but no properties in this price range');
                     console.log('The $2M-$5M range might have limited inventory');
+                    console.log('Loading demo data with featured properties...');
+                    loadProperties(); // Load demo data as fallback
                 }
             })
             .catch(error => {
                 console.error('❌ API Error:', error.message);
                 console.log('\nTroubleshooting:');
-                console.log('1. If you see CORS errors, serve this file from a web server');
+                console.log('1. If you see CORS errors, this is a GitHub Pages limitation');
                 console.log('2. If you see 403, check your RapidAPI subscription');
                 console.log('3. If you see 429, you may have hit rate limits');
-                console.log('\nClick "Test API Connection" button for detailed diagnostics');
+                console.log('\n📝 Loading demo data with your featured properties...');
+                
+                // Load demo data as fallback
+                loadProperties();
             });
         });
     </script>
