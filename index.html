@@ -756,36 +756,10 @@
     </header>
 
     <main class="container">
-        <section class="status-section">
-            <div class="status-card">
-                <div class="status-content">
-                    <div class="status-indicator" id="statusIndicator"></div>
-                    <div class="status-text">
-                        <div class="status-title" id="statusTitle">Connecting to Zillow API</div>
-                        <div class="status-subtitle" id="statusSubtitle">Initializing data feed...</div>
-                    </div>
-                </div>
-                <div class="api-metrics">
-                    <div class="metric">
-                        <span class="metric-value" id="apiCalls">0</span>
-                        <span class="metric-label">API Calls</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-value" id="responseTime">0ms</span>
-                        <span class="metric-label">Response</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-value" id="dataQuality">100%</span>
-                        <span class="metric-label">Quality</span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         <section class="controls-section">
             <div class="controls-card">
                 <div class="search-header">
-                    <h2 class="search-title">Premium Tennessee Properties</h2>
+                    <h2 class="search-title">Brentwood, Franklin, and College Grove Properties</h2>
                     <span style="color: var(--apple-gray); font-size: 14px;">Last updated: <span id="lastUpdate">Never</span></span>
                 </div>
                 
@@ -831,6 +805,10 @@
                 <div class="view-options">
                     <button class="view-btn active" onclick="setView('grid')">Grid</button>
                     <button class="view-btn" onclick="setView('list')">List</button>
+                    <span style="margin-left: 20px; color: var(--apple-gray); font-size: 14px;">
+                        Page <span id="currentPageNum">1</span> of <span id="totalPages">1</span>
+                        | Showing <span id="showingStart">1</span>-<span id="showingEnd">100</span> of <span id="totalPropertiesCount">0</span>
+                    </span>
                 </div>
             </div>
             
@@ -838,6 +816,44 @@
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
                     <div class="loading-text">Loading premium properties...</div>
+                </div>
+            </div>
+            
+            <div class="pagination-controls" style="display: flex; justify-content: center; gap: 10px; margin: 30px 0;">
+                <button class="btn btn-secondary" onclick="previousPage()" id="prevBtn">
+                    ← Previous
+                </button>
+                <div id="pageNumbers" style="display: flex; gap: 5px; align-items: center;">
+                    <!-- Page numbers will be inserted here -->
+                </div>
+                <button class="btn btn-secondary" onclick="nextPage()" id="nextBtn">
+                    Next →
+                </button>
+            </div>
+        </section>
+        
+        <section class="status-section">
+            <div class="status-card">
+                <div class="status-content">
+                    <div class="status-indicator" id="statusIndicator"></div>
+                    <div class="status-text">
+                        <div class="status-title" id="statusTitle">Connecting to Zillow API</div>
+                        <div class="status-subtitle" id="statusSubtitle">Initializing data feed...</div>
+                    </div>
+                </div>
+                <div class="api-metrics">
+                    <div class="metric">
+                        <span class="metric-value" id="apiCalls">0</span>
+                        <span class="metric-label">API Calls</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-value" id="responseTime">0ms</span>
+                        <span class="metric-label">Response</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-value" id="dataQuality">100%</span>
+                        <span class="metric-label">Quality</span>
+                    </div>
                 </div>
             </div>
         </section>
@@ -908,6 +924,8 @@
         let currentView = 'grid';
         let apiCallCount = 0;
         let lastResponseTime = 0;
+        let currentPage = 1;
+        const propertiesPerPage = 100;
 
         // Initialize Application
         async function init() {
@@ -1155,7 +1173,7 @@
             }
         }
 
-        // Fetch from Zillow API - Using exact curl format
+        // Fetch from Zillow API - Using exact curl format (NO LIMIT)
         async function fetchFromZillow() {
             console.log('🏠 Starting Zillow API fetch with verified endpoint...');
             const allProperties = [];
@@ -1192,73 +1210,105 @@
                 'College Grove, TN'
             ];
             
+            // Fetch multiple pages to get ALL properties
             for (const location of searchLocations) {
                 console.log(`\n📍 Searching: ${location}`);
                 
-                try {
-                    // Method 1: Property Extended Search (most comprehensive)
-                    const searchUrl = `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${encodeURIComponent(location)}&status_type=ForSale&home_type=Houses,Townhomes,Condos&minPrice=2000000&maxPrice=5000000&sort=Price_Low_High&page=1`;
-                    
-                    console.log('🔗 Search URL:', searchUrl);
-                    
-                    const response = await fetch(searchUrl, {
-                        method: 'GET',
-                        headers: {
-                            'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
-                            'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
-                        }
-                    });
-                    
-                    console.log(`📊 Response Status: ${response.status}`);
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        console.log(`✅ Data received for ${location}:`, data);
+                let page = 1;
+                let hasMorePages = true;
+                
+                while (hasMorePages && page <= 10) { // Limit to 10 pages for safety
+                    try {
+                        // Method 1: Property Extended Search (most comprehensive)
+                        const searchUrl = `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${encodeURIComponent(location)}&status_type=ForSale&home_type=Houses,Townhomes,Condos&minPrice=2000000&maxPrice=5000000&sort=Price_Low_High&page=${page}`;
                         
-                        // Check for properties in the response
-                        if (data.props && Array.isArray(data.props)) {
-                            console.log(`🏠 Found ${data.props.length} properties in ${location}`);
+                        console.log(`🔗 Search URL (Page ${page}):`, searchUrl);
+                        
+                        const response = await fetch(searchUrl, {
+                            method: 'GET',
+                            headers: {
+                                'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
+                                'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
+                            }
+                        });
+                        
+                        console.log(`📊 Response Status: ${response.status}`);
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            console.log(`✅ Data received for ${location} (Page ${page}):`, data);
                             
-                            // Transform each property
-                            const transformed = data.props.map(prop => {
-                                // Extract details from Zillow's response format
-                                return {
-                                    zpid: prop.zpid || prop.id || Math.random().toString(36).substr(2, 9),
-                                    address: prop.address || prop.streetAddress || `${prop.beds || 4} BR Home`,
-                                    city: prop.city || location.split(',')[0],
-                                    state: prop.state || 'TN',
-                                    zipcode: prop.zipcode || prop.zip || '37067',
-                                    price: prop.price || prop.unformattedPrice || 3000000,
-                                    bedrooms: prop.beds || prop.bedrooms || 4,
-                                    bathrooms: prop.baths || prop.bathrooms || 3,
-                                    sqft: prop.area || prop.livingArea || prop.sqft || 4000,
-                                    yearBuilt: prop.yearBuilt || 2015,
-                                    propertyType: prop.propertyType || prop.homeType || 'Single Family',
-                                    imageUrl: prop.imgSrc || prop.image || prop.relaxedImgSrc || null,
-                                    listingDate: prop.listingDateTime ? new Date(prop.listingDateTime) : new Date(),
-                                    isFeatured: checkIfFeatured(prop.address || prop.streetAddress || ''),
-                                    isNew: prop.isNew || false,
-                                    hasOpenHouse: prop.hasOpenHouse || false,
-                                    zillowUrl: prop.detailUrl || `https://www.zillow.com/homedetails/${prop.zpid}_zpid/`,
-                                    listingStatus: prop.listingStatus || 'FOR_SALE',
-                                    daysOnZillow: prop.daysOnZillow || 0,
-                                    priceChange: prop.priceChange || 0
-                                };
-                            });
-                            
-                            allProperties.push(...transformed);
-                            console.log(`✨ Added ${transformed.length} properties from ${location}`);
+                            // Check for properties in the response
+                            if (data.props && Array.isArray(data.props) && data.props.length > 0) {
+                                console.log(`🏠 Found ${data.props.length} properties in ${location} (Page ${page})`);
+                                
+                                // Transform each property
+                                const transformed = data.props.map(prop => {
+                                    // Extract details from Zillow's response format
+                                    return {
+                                        zpid: prop.zpid || prop.id || Math.random().toString(36).substr(2, 9),
+                                        address: prop.address || prop.streetAddress || `${prop.beds || 4} BR Home`,
+                                        city: prop.city || location.split(',')[0],
+                                        state: prop.state || 'TN',
+                                        zipcode: prop.zipcode || prop.zip || '37067',
+                                        price: prop.price || prop.unformattedPrice || 3000000,
+                                        bedrooms: prop.beds || prop.bedrooms || 4,
+                                        bathrooms: prop.baths || prop.bathrooms || 3,
+                                        sqft: prop.area || prop.livingArea || prop.sqft || 4000,
+                                        yearBuilt: prop.yearBuilt || 2015,
+                                        propertyType: prop.propertyType || prop.homeType || 'Single Family',
+                                        imageUrl: prop.imgSrc || prop.image || prop.relaxedImgSrc || null,
+                                        listingDate: prop.listingDateTime ? new Date(prop.listingDateTime) : new Date(),
+                                        isFeatured: checkIfFeatured(prop.address || prop.streetAddress || ''),
+                                        isNew: prop.isNew || false,
+                                        hasOpenHouse: prop.hasOpenHouse || false,
+                                        zillowUrl: prop.detailUrl || prop.url || `https://www.zillow.com/homedetails/${prop.zpid}_zpid/`,
+                                        listingStatus: prop.listingStatus || 'FOR_SALE',
+                                        daysOnZillow: prop.daysOnZillow || 0,
+                                        priceChange: prop.priceChange || 0,
+                                        description: prop.description || prop.homeDescription || prop.listingDescription || 
+                                                    `Beautiful ${prop.beds || 4} bedroom, ${prop.baths || 3} bathroom home in ${location.split(',')[0]}. ` +
+                                                    `This ${prop.propertyType || 'Single Family'} home features ${prop.area || 4000} square feet of living space. ` +
+                                                    `Built in ${prop.yearBuilt || 2015}, this property offers modern amenities and luxurious finishes throughout.`
+                                    };
+                                });
+                                
+                                allProperties.push(...transformed);
+                                console.log(`✨ Added ${transformed.length} properties from ${location} (Page ${page})`);
+                                
+                                // Check if there are more pages
+                                page++;
+                                if (data.props.length < 40) { // Most pages have 40 properties
+                                    hasMorePages = false;
+                                }
+                            } else {
+                                console.warn(`⚠️ No more properties found in ${location} (Page ${page})`);
+                                hasMorePages = false;
+                            }
                         } else {
-                            console.warn(`⚠️ No properties found in ${location} response`);
+                            const errorText = await response.text();
+                            console.error(`❌ Error for ${location} (Page ${page}): ${response.status} - ${errorText.substring(0, 100)}`);
+                            hasMorePages = false;
                         }
-                    } else {
-                        const errorText = await response.text();
-                        console.error(`❌ Error for ${location}: ${response.status} - ${errorText.substring(0, 100)}`);
+                    } catch (error) {
+                        console.error(`❌ Failed to search ${location} (Page ${page}):`, error);
+                        hasMorePages = false;
                     }
-                } catch (error) {
-                    console.error(`❌ Failed to search ${location}:`, error);
                 }
             }
+            
+            console.log(`\n🎯 Total properties fetched: ${allProperties.length}`);
+            
+            if (allProperties.length > 0) {
+                // Sort by price - NO LIMIT
+                const sorted = allProperties.sort((a, b) => a.price - b.price);
+                console.log(`📊 Returning ${sorted.length} sorted properties (no limit)`);
+                return sorted;
+            }
+            
+            console.warn('⚠️ No properties fetched from API');
+            return [];
+        }
             
             // Also try searching by ZIP codes using the marketData endpoint
             console.log('\n📮 Searching by ZIP codes...');
@@ -1394,7 +1444,7 @@
             return transformed;
         }
 
-        // Generate Enhanced Mock Data
+        // Generate Enhanced Mock Data (200+ properties for pagination testing)
         function generateEnhancedMockData() {
             const mockData = [];
             
@@ -1417,41 +1467,53 @@
                     isFeatured: true,
                     isNew: index < 3,
                     hasOpenHouse: fp.openHouse || false,
-                    zillowUrl: `https://www.zillow.com/homes/for_sale/`,
+                    zillowUrl: `https://www.zillow.com/homedetails/${fp.zip}-${index}_zpid/`,
                     listingStatus: 'FOR_SALE',
                     daysOnZillow: Math.floor(Math.random() * 30),
                     priceChange: (Math.random() - 0.5) * 50000,
-                    category: fp.category
+                    category: fp.category,
+                    description: `Stunning luxury property in ${fp.category || fp.city}. This exceptional home features premium finishes, ` +
+                                `spacious living areas, and is located in one of Tennessee's most desirable neighborhoods. ` +
+                                `Perfect for those seeking luxury and comfort in ${fp.city}.`
                 });
             });
             
-            // Add additional random properties
-            for (let i = 0; i < 30; i++) {
-                const cities = ['Franklin', 'Brentwood', 'College Grove'];
+            // Add 200+ additional random properties to test pagination
+            const streets = ['Oak Ridge', 'Maple Valley', 'Cedar Hills', 'Birch Lane', 'Pine Court', 
+                           'Willow Brook', 'Stone Creek', 'Heritage', 'Fox Run', 'Deer Path'];
+            const cities = ['Franklin', 'Brentwood', 'College Grove'];
+            
+            for (let i = 0; i < 200; i++) {
                 const city = cities[i % cities.length];
+                const street = streets[i % streets.length];
+                const price = 2000000 + Math.floor(Math.random() * 3000000);
                 
                 mockData.push({
                     zpid: `mock-${i}`,
-                    address: `${1000 + i * 100} Estate Drive`,
+                    address: `${1000 + i * 10} ${street} Drive`,
                     city: city,
                     state: 'TN',
                     zipcode: city === 'Brentwood' ? '37027' : city === 'College Grove' ? '37046' : '37067',
-                    price: 2000000 + Math.floor(Math.random() * 3000000),
+                    price: price,
                     bedrooms: 3 + Math.floor(Math.random() * 4),
                     bathrooms: 2 + Math.floor(Math.random() * 3),
                     sqft: 3000 + Math.floor(Math.random() * 4000),
                     yearBuilt: 2010 + Math.floor(Math.random() * 15),
-                    propertyType: 'Single Family',
+                    propertyType: ['Single Family', 'Estate', 'Contemporary', 'Traditional'][Math.floor(Math.random() * 4)],
                     imageUrl: `https://photos.zillowstatic.com/fp/sample${(i % 10) + 1}_cc.jpg`,
                     listingDate: new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000),
                     isFeatured: false,
-                    isNew: i < 5,
-                    hasOpenHouse: Math.random() > 0.8,
-                    zillowUrl: `https://www.zillow.com/homes/for_sale/`,
+                    isNew: i < 10,
+                    hasOpenHouse: Math.random() > 0.9,
+                    zillowUrl: `https://www.zillow.com/homedetails/mock-${i}_zpid/`,
                     listingStatus: 'FOR_SALE',
                     daysOnZillow: Math.floor(Math.random() * 60),
                     priceChange: (Math.random() - 0.5) * 100000,
-                    category: null
+                    category: null,
+                    description: `Elegant ${3 + Math.floor(Math.random() * 4)} bedroom home in beautiful ${city}, Tennessee. ` +
+                                `This ${Math.floor(price/1000000 * 10)/10}M property offers ${3000 + Math.floor(Math.random() * 4000)} square feet ` +
+                                `of luxurious living space with high-end finishes and modern amenities. Located in a prestigious neighborhood ` +
+                                `with excellent schools and easy access to Nashville. Perfect for discerning buyers seeking quality and location.`
                 });
             }
             
@@ -1604,7 +1666,7 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
                     <div>
                         <h3 style="font-size: 36px; font-weight: 700; color: var(--apple-black); margin-bottom: 8px;">
-                            $${property.price.toLocaleString()}
+                            ${property.price.toLocaleString()}
                         </h3>
                         <p style="color: var(--apple-gray); font-size: 17px;">
                             ${property.city}, ${property.state} ${property.zipcode}
@@ -1654,6 +1716,13 @@
                     </div>
                 </div>
                 
+                ${property.description ? `
+                    <div style="background: var(--apple-gray-lighter); padding: 24px; border-radius: 12px; margin-bottom: 24px;">
+                        <h4 style="font-size: 19px; font-weight: 600; margin-bottom: 16px;">Property Description</h4>
+                        <p style="line-height: 1.6; color: var(--apple-gray-dark);">${property.description}</p>
+                    </div>
+                ` : ''}
+                
                 ${property.category ? `
                     <div style="background: linear-gradient(135deg, rgba(191, 90, 242, 0.1), rgba(191, 90, 242, 0.05)); padding: 16px; border-radius: 12px; margin-bottom: 24px;">
                         <p style="font-size: 14px; color: var(--apple-purple); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
@@ -1663,7 +1732,7 @@
                 ` : ''}
                 
                 <div style="display: flex; gap: 12px; justify-content: center;">
-                    <button class="btn btn-primary" onclick="window.open('${property.zillowUrl}', '_blank')">
+                    <button class="btn btn-primary" onclick="openZillowLink('${property.zillowUrl}')">
                         View on Zillow
                     </button>
                     <button class="btn btn-secondary" onclick="scheduleViewing('${property.zpid}')">
@@ -1894,6 +1963,8 @@
             console.log('🔍 UPDATE SEARCH CLICKED');
             console.log('Attempting to load real Zillow data...');
             
+            currentPage = 1; // Reset to page 1
+            
             // First try to force a fresh API call
             const success = await forceAPIRefresh();
             
@@ -1908,6 +1979,7 @@
         // Toggle Featured Only
         function toggleFeatured() {
             showFeaturedOnly = !showFeaturedOnly;
+            currentPage = 1; // Reset to page 1 when filtering
             renderProperties();
             updateStats();
         }
