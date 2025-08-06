@@ -1,623 +1,587 @@
-import React, { useState, useEffect } from 'react';
-import { Star, ExternalLink, Info, ChevronLeft, ChevronRight, Home, MapPin, DollarSign, Bed, Bath, Square, AlertCircle, RefreshCw } from 'lucide-react';
-
-const NashvilleRealEstate = () => {
-  const [properties, setProperties] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [selectedProperty, setSelectedProperty] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
-  const [apiStatus, setApiStatus] = useState('Connecting to Zillow API...');
-  const [showDebug, setShowDebug] = useState(false);
-  const [debugInfo, setDebugInfo] = useState('');
-  
-  const PROPERTIES_PER_PAGE = 75;
-  
-  // API Configuration - Updated to use backend server
-  const API_CONFIG = {
-    // ⚠️ IMPORTANT: Update this URL for production deployment
-    // Development: http://localhost:3001
-    // Production: https://your-backend-url.com
-    backendUrl: 'http://localhost:3001',
-    // Fallback to direct API if you want to test (will be blocked by CORS)
-    directEndpoint: 'https://zillow-com1.p.rapidapi.com/marketData',
-    headers: {
-      'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
-      'x-rapidapi-key': '37b5cffffamsh6c4ba5550a4883ep196c6fjsn2dc297e77753'
-    }
-  };
-  
-  // Properties of interest from your document
-  const propertiesOfInterest = [
-    '7045 Lanceleaf Dr, College Grove, TN 37046',
-    '6004 Pelican Way, College Grove, TN 37046',
-    '6045 Native Pony Trl, College Grove, TN 37046',
-    '8500 Heirloom Blvd, College Grove, TN 37046',
-    '8135 Heirloom Blvd, College Grove, TN 37046',
-    '8524 Heirloom Blvd, College Grove, TN 37046',
-    '9052 Passiflora Ct, College Grove, TN 37046',
-    '391 The Lady Of The Lake Ln, Franklin, TN 37067',
-    '1005 Scramblers Knob, Franklin, TN 37069',
-    '1420 Amesbury Ln, Franklin, TN 37069',
-    '1807 Morgan Farms Way, Brentwood, TN 37027',
-    '305 Lockhart Ct, Franklin, TN 37069',
-    '6128 Lookaway Cir LOT 208, Franklin, TN 37067',
-    '8100 Turning Point Dr LOT 14, Brentwood, TN 37027',
-    '8103 Turning Point Dr LOT 12, Brentwood, TN 37027',
-    '7116 Bonterra Dr, Franklin, TN 37064',
-    '1013 Buena Vista Dr, Franklin, TN 37069',
-    '5603 Winslet Dr, Franklin, TN 37064',
-    '9222 Lehigh Dr, Brentwood, TN 37027',
-    '460 Tinnan Ave, Franklin, TN 37067'
-  ];
-
-  // Fetch properties from Zillow API via backend server
-  const fetchPropertiesFromAPI = async () => {
-    const allProperties = [];
-    
-    try {
-      setApiStatus('Connecting to property database...');
-      
-      // First, try to connect to backend server
-      let useBackend = true;
-      let response;
-      
-      try {
-        // Attempt to connect to backend server
-        response = await fetch(`${API_CONFIG.backendUrl}/api/properties/all`);
-        console.log('Backend server response:', response.status);
-        
-        if (!response.ok && response.status === 0) {
-          // Backend not available, try direct API
-          throw new Error('Backend server not running');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bill & Cyndee Verhelle's Preferred Properties</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-      } catch (backendError) {
-        console.log('Backend not available, attempting direct API call...');
-        useBackend = false;
         
-        // Try direct API call (will likely fail due to CORS)
-        const url = 'https://zillow-com1.p.rapidapi.com/marketData?resourceId=32810&beds=0&propertyTypes=house';
-        
-        response = await fetch(url, {
-          method: 'GET',
-          headers: API_CONFIG.headers
-        });
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error Response:', errorText);
-        throw new Error(`API Error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('API Response Data:', data);
-      
-      // Handle different possible response structures
-      const results = data.results || data.data || data.listings || data;
-      
-      if (Array.isArray(results)) {
-        const formattedProperties = results
-          .filter(prop => {
-            // Filter by price range
-            const price = prop.price || prop.zestimate || prop.unformattedPrice;
-            return !price || (price >= 2000000 && price <= 5000000);
-          })
-          .map((prop, index) => ({
-            id: `zillow-${index}`,
-            address: prop.address || prop.streetAddress || `${prop.street || ''} ${prop.city || 'Nashville'}, ${prop.state || 'TN'} ${prop.zipcode || ''}`.trim(),
-            price: prop.price || prop.zestimate || prop.unformattedPrice || 2500000,
-            beds: prop.bedrooms || prop.beds || 4,
-            baths: prop.bathrooms || prop.baths || 3,
-            sqft: prop.livingArea || prop.sqft || prop.area || 4000,
-            image: prop.imgSrc || prop.image || prop.photoUrl || `https://picsum.photos/400/300?random=${index}`,
-            zillowUrl: prop.detailUrl || prop.url || `https://www.zillow.com/homedetails/${prop.zpid || index}`,
-            isInterest: false,
-            description: prop.description || 'Luxury property in prime Nashville area',
-            zpid: prop.zpid,
-            propertyType: prop.homeType || prop.propertyType || 'Single Family',
-            yearBuilt: prop.yearBuilt,
-            lotSize: prop.lotAreaValue || prop.lotSize,
-            listingStatus: prop.homeStatus || prop.status || 'For Sale'
-          }));
-        
-        allProperties.push(...formattedProperties);
-        setApiStatus(`Successfully loaded ${formattedProperties.length} properties ${useBackend ? 'from server' : 'from API'}`);
-      } else {
-        console.log('Non-array results structure:', results);
-        setApiStatus('API returned unexpected data structure');
-      }
-      
-    } catch (err) {
-      console.error('API Connection Error:', err);
-      setApiStatus(`Connection Error: ${err.message}`);
-      
-      // Check if it's a CORS error
-      if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
-        console.log('CORS error detected - backend server required');
-        setApiStatus('Backend server required - see instructions below');
-      }
-    }
-
-    return allProperties;
-  };
-
-  // Generate fallback mock data if API fails
-  const generateFallbackData = () => {
-    const mockData = [];
-    const cities = ['Nashville', 'Brentwood', 'Franklin', 'College Grove'];
-    const streets = ['Oak Ridge', 'Maple Grove', 'Elm Creek', 'Pine Valley', 'Cedar Hills', 'Birch Lane', 'Willow Springs', 'Cherry Blossom'];
-    
-    // Add properties of interest first with realistic data
-    propertiesOfInterest.forEach((address, index) => {
-      mockData.push({
-        id: `interest-${index}`,
-        address: address,
-        price: 2000000 + Math.floor(Math.random() * 3000000),
-        beds: Math.floor(Math.random() * 3) + 3,
-        baths: Math.floor(Math.random() * 2) + 2.5,
-        sqft: Math.floor(Math.random() * 3000) + 3500,
-        image: `https://picsum.photos/400/300?random=${index}`,
-        zillowUrl: `https://www.zillow.com/homes/${address.replace(/\s+/g, '-')}`,
-        isInterest: true,
-        description: 'Premium estate property featuring luxury finishes, gourmet kitchen, and resort-style amenities',
-        propertyType: 'Single Family',
-        yearBuilt: 2015 + Math.floor(Math.random() * 8),
-        lotSize: (0.5 + Math.random() * 2).toFixed(2) + ' acres',
-        listingStatus: 'For Sale'
-      });
-    });
-    
-    // Generate additional properties
-    for (let i = propertiesOfInterest.length; i < 375; i++) {
-      const city = cities[Math.floor(Math.random() * cities.length)];
-      const street = streets[Math.floor(Math.random() * streets.length)];
-      mockData.push({
-        id: `prop-${i}`,
-        address: `${1000 + i} ${street} ${Math.random() > 0.5 ? 'Dr' : 'Ln'}, ${city}, TN ${37000 + Math.floor(Math.random() * 100)}`,
-        price: 2000000 + Math.floor(Math.random() * 3000000),
-        beds: Math.floor(Math.random() * 3) + 3,
-        baths: Math.floor(Math.random() * 2) + 2.5,
-        sqft: Math.floor(Math.random() * 3000) + 3500,
-        image: `https://picsum.photos/400/300?random=${i + 100}`,
-        zillowUrl: `https://www.zillow.com/homedetails/property-${i}`,
-        isInterest: false,
-        description: 'Elegant home in desirable neighborhood with modern updates and premium features',
-        propertyType: 'Single Family',
-        yearBuilt: 2010 + Math.floor(Math.random() * 13),
-        lotSize: (0.25 + Math.random() * 1.5).toFixed(2) + ' acres',
-        listingStatus: 'For Sale'
-      });
-    }
-    
-    return mockData.sort((a, b) => a.price - b.price);
-  };
-
-  // Load properties on component mount
-  useEffect(() => {
-    const loadProperties = async () => {
-      setLoading(true);
-      setError(null);
-      let debugLog = 'API Connection Debug Log:\n';
-      debugLog += `Timestamp: ${new Date().toISOString()}\n`;
-      debugLog += `API Key: ${API_CONFIG.headers['x-rapidapi-key'].substring(0, 10)}...${API_CONFIG.headers['x-rapidapi-key'].substring(-4)}\n\n`;
-      
-      try {
-        // Try to fetch from API first
-        const apiProperties = await fetchPropertiesFromAPI();
-        
-        if (apiProperties.length > 0) {
-          debugLog += `✅ Success: Loaded ${apiProperties.length} properties from Zillow\n`;
-          setApiStatus(`Successfully loaded ${apiProperties.length} properties from Zillow`);
-          
-          // Mark properties of interest
-          const processedProperties = apiProperties.map(prop => {
-            const isInterest = propertiesOfInterest.some(addr => 
-              prop.address.toLowerCase().includes(addr.toLowerCase())
-            );
-            return { ...prop, isInterest };
-          });
-          
-          // Sort by price
-          const sortedProperties = processedProperties.sort((a, b) => a.price - b.price);
-          setProperties(sortedProperties);
-        } else {
-          // If API returns no data, use fallback
-          debugLog += '⚠️ Warning: API returned no properties\n';
-          throw new Error('No properties returned from API');
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            background: #f5f5f7;
+            color: #1d1d1f;
         }
-      } catch (err) {
-        console.error('API Error:', err);
-        debugLog += `❌ Error: ${err.message}\n`;
-        debugLog += '\nPossible issues:\n';
-        debugLog += '1. CORS blocking (most likely in browser environment)\n';
-        debugLog += '2. Invalid or expired API key\n';
-        debugLog += '3. API rate limit exceeded\n';
-        debugLog += '4. Network connectivity issues\n\n';
-        debugLog += 'Solution: Deploy with backend server to bypass CORS\n';
-        
-        setApiStatus('Using demo data (API blocked by CORS)');
-        setDebugInfo(debugLog);
-        
-        // Use fallback data
-        const fallbackData = generateFallbackData();
-        setProperties(fallbackData);
-        
-        setError(
-          <div className="text-sm">
-            <p className="font-semibold mb-1">Backend Server Required</p>
-            <p className="mb-2">To fetch live Zillow data, you need to run the backend server:</p>
-            <ol className="list-decimal list-inside space-y-1 text-xs">
-              <li>Install Node.js if not already installed</li>
-              <li>Create a new folder and save the server.js file</li>
-              <li>Run: <code className="bg-gray-200 px-1 rounded">npm install express cors axios</code></li>
-              <li>Run: <code className="bg-gray-200 px-1 rounded">node server.js</code></li>
-              <li>The server will start on port 3001</li>
-            </ol>
-            <button
-              onClick={() => setShowDebug(!showDebug)}
-              className="mt-2 text-blue-600 hover:text-blue-700 underline text-xs"
-            >
-              {showDebug ? 'Hide' : 'Show'} Debug Info
-            </button>
-          </div>
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
 
-    loadProperties();
-  }, []);
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
 
-  // Retry API connection
-  const retryAPIConnection = () => {
-    window.location.reload();
-  };
+        header {
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
 
-  const totalPages = Math.ceil(properties.length / PROPERTIES_PER_PAGE);
-  const startIndex = (currentPage - 1) * PROPERTIES_PER_PAGE;
-  const endIndex = startIndex + PROPERTIES_PER_PAGE;
-  const currentProperties = properties.slice(startIndex, endIndex);
+        .header-content {
+            padding: 24px 0;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(price);
-  };
+        .logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
 
-  const PropertyCard = ({ property }) => {
-    return (
-      <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]">
-        {property.isInterest && (
-          <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-black px-3 py-1 flex items-center justify-center">
-            <Star className="w-4 h-4 mr-1 fill-current" />
-            <span className="text-xs font-semibold">Property of Interest</span>
-          </div>
-        )}
-        <div className="relative">
-          <img 
-            src={property.image} 
-            alt={property.address}
-            className="w-full h-48 object-cover"
-            onError={(e) => {
-              e.target.src = `https://picsum.photos/400/300?random=${Math.random()}`;
-            }}
-          />
-          <div className="absolute top-3 left-3 bg-black/70 text-white px-3 py-1 rounded-full">
-            <span className="text-sm font-semibold">{formatPrice(property.price)}</span>
-          </div>
-          {property.listingStatus && (
-            <div className="absolute top-3 right-3 bg-green-500 text-white px-2 py-1 rounded text-xs">
-              {property.listingStatus}
-            </div>
-          )}
-        </div>
-        
-        <div className="p-4">
-          <div className="flex items-start justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 flex-1">
-              {property.address}
-            </h3>
-          </div>
-          
-          <div className="flex items-center gap-4 text-xs text-gray-600 mb-4">
-            <div className="flex items-center gap-1">
-              <Bed className="w-3 h-3" />
-              <span>{property.beds} beds</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Bath className="w-3 h-3" />
-              <span>{property.baths} baths</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Square className="w-3 h-3" />
-              <span>{property.sqft?.toLocaleString()} sqft</span>
-            </div>
-          </div>
-          
-          <div className="flex gap-2">
-            <a
-              href={property.zillowUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-1 text-sm font-medium"
-            >
-              <ExternalLink className="w-3 h-3" />
-              Zillow
-            </a>
-            <button
-              onClick={() => {
-                setSelectedProperty(property);
-                setShowDetails(true);
-              }}
-              className="flex-1 bg-gray-200 text-gray-900 py-2 px-3 rounded-lg hover:bg-gray-300 transition-colors flex items-center justify-center gap-1 text-sm font-medium"
-            >
-              <Info className="w-3 h-3" />
-              Details
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
+        .stats-bar {
+            background: #2563eb;
+            color: white;
+            padding: 12px 0;
+        }
 
-  const PropertyDetailsModal = ({ property, onClose }) => {
-    if (!property) return null;
+        .stats-content {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
 
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Property Details</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
-            >
-              ×
-            </button>
-          </div>
-          
-          <div className="p-6">
-            <img 
-              src={property.image} 
-              alt={property.address}
-              className="w-full h-64 object-cover rounded-xl mb-6"
-              onError={(e) => {
-                e.target.src = `https://picsum.photos/600/400?random=${Math.random()}`;
-              }}
-            />
+        .property-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            padding: 32px 0;
+        }
+
+        .property-card {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .property-card:hover {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+
+        .interest-badge {
+            background: linear-gradient(90deg, #facc15, #fbbf24);
+            color: black;
+            padding: 4px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .property-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .image-container {
+            position: relative;
+        }
+
+        .price-badge {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .property-details {
+            padding: 16px;
+        }
+
+        .property-address {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .property-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 16px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #1f2937;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            padding: 32px 0;
+        }
+
+        .page-btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-btn.active {
+            background: #2563eb;
+            color: white;
+        }
+
+        footer {
+            background: #1f2937;
+            color: white;
+            text-align: center;
+            padding: 32px 0;
+            margin-top: 64px;
+        }
+
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        .close-btn:hover {
+            color: #1f2937;
+        }
+
+        @media (max-width: 768px) {
+            .property-grid {
+                grid-template-columns: 1fr;
+            }
             
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">{formatPrice(property.price)}</h3>
-                <p className="text-gray-600 flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  {property.address}
-                </p>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-4 py-4 border-y">
-                <div className="text-center">
-                  <Bed className="w-6 h-6 mx-auto mb-1 text-gray-600" />
-                  <p className="text-lg font-semibold">{property.beds}</p>
-                  <p className="text-sm text-gray-600">Bedrooms</p>
+            .stats-content {
+                flex-direction: column;
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">BV</div>
+                <div>
+                    <h1 style="font-size: 24px; font-weight: bold;">
+                        Bill & Cyndee Verhelle's Preferred Properties
+                    </h1>
+                    <p style="font-size: 14px; color: #6b7280;">
+                        Property Search Agent developed by Bill Verhelle
+                    </p>
                 </div>
-                <div className="text-center">
-                  <Bath className="w-6 h-6 mx-auto mb-1 text-gray-600" />
-                  <p className="text-lg font-semibold">{property.baths}</p>
-                  <p className="text-sm text-gray-600">Bathrooms</p>
-                </div>
-                <div className="text-center">
-                  <Square className="w-6 h-6 mx-auto mb-1 text-gray-600" />
-                  <p className="text-lg font-semibold">{property.sqft?.toLocaleString()}</p>
-                  <p className="text-sm text-gray-600">Square Feet</p>
-                </div>
-              </div>
-              
-              {(property.yearBuilt || property.lotSize || property.propertyType) && (
-                <div className="grid grid-cols-3 gap-4 py-4 border-b">
-                  {property.yearBuilt && (
-                    <div>
-                      <p className="text-sm text-gray-600">Year Built</p>
-                      <p className="font-semibold">{property.yearBuilt}</p>
-                    </div>
-                  )}
-                  {property.lotSize && (
-                    <div>
-                      <p className="text-sm text-gray-600">Lot Size</p>
-                      <p className="font-semibold">{property.lotSize}</p>
-                    </div>
-                  )}
-                  {property.propertyType && (
-                    <div>
-                      <p className="text-sm text-gray-600">Type</p>
-                      <p className="font-semibold">{property.propertyType}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              <div>
-                <h4 className="font-semibold mb-2">Description</h4>
-                <p className="text-gray-600">{property.description}</p>
-              </div>
-              
-              <div className="pt-4">
-                <a
-                  href={property.zillowUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  View Full Details on Zillow
-                </a>
-              </div>
             </div>
-          </div>
         </div>
-      </div>
-    );
-  };
+    </header>
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">{apiStatus}</p>
-          <p className="text-sm text-gray-500 mt-2">Loading Nashville area properties...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="py-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg">
-                BV
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Bill & Cyndee Verhelle's Preferred Properties
-                </h1>
-                <p className="text-sm text-gray-600">
-                  Property Search Agent developed by Bill Verhelle
-                </p>
-              </div>
+    <div class="stats-bar">
+        <div class="container">
+            <div class="stats-content">
+                <span id="showing-stats">Loading properties...</span>
+                <span>Price Range: $2M - $5M | Sorted: Low to High</span>
             </div>
-          </div>
         </div>
-      </header>
+    </div>
 
-      {/* API Status Bar */}
-      {error && (
-        <div className="bg-yellow-50 border-b border-yellow-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 text-yellow-800">{error}</div>
-              <button
-                onClick={retryAPIConnection}
-                className="flex items-center gap-1 px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors text-sm"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Retry
-              </button>
+    <div class="container">
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 16px; color: #6b7280;">Loading properties...</p>
+        </div>
+        
+        <div id="property-grid" class="property-grid" style="display: none;"></div>
+        
+        <div id="pagination" class="pagination" style="display: none;"></div>
+    </div>
+
+    <footer>
+        <p>© Bill & Cyndee Verhelle, All Rights Reserved</p>
+    </footer>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Property Details</h2>
+                <button class="close-btn" onclick="closeModal()">×</button>
             </div>
-            {showDebug && debugInfo && (
-              <div className="mt-3 p-3 bg-gray-900 text-green-400 rounded text-xs font-mono whitespace-pre-wrap">
-                {debugInfo}
-              </div>
-            )}
-          </div>
+            <div id="modal-body" class="modal-body"></div>
         </div>
-      )}
+    </div>
 
-      {/* Stats Bar */}
-      <div className="bg-blue-600 text-white py-3">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between text-sm">
-            <span>
-              Showing {startIndex + 1}-{Math.min(endIndex, properties.length)} of {properties.length} properties 
-              ({propertiesOfInterest.filter(addr => 
-                currentProperties.some(p => p.address.toLowerCase().includes(addr.toLowerCase()))
-              ).length} marked as interest)
-            </span>
-            <span>Price Range: $2M - $5M | Sorted: Low to High</span>
-          </div>
-        </div>
-      </div>
+    <script>
+        // Properties of interest
+        const propertiesOfInterest = [
+            '7045 Lanceleaf Dr, College Grove, TN 37046',
+            '6004 Pelican Way, College Grove, TN 37046',
+            '6045 Native Pony Trl, College Grove, TN 37046',
+            '8500 Heirloom Blvd, College Grove, TN 37046',
+            '8135 Heirloom Blvd, College Grove, TN 37046',
+            '8524 Heirloom Blvd, College Grove, TN 37046',
+            '9052 Passiflora Ct, College Grove, TN 37046',
+            '391 The Lady Of The Lake Ln, Franklin, TN 37067',
+            '1005 Scramblers Knob, Franklin, TN 37069',
+            '1420 Amesbury Ln, Franklin, TN 37069',
+            '1807 Morgan Farms Way, Brentwood, TN 37027',
+            '305 Lockhart Ct, Franklin, TN 37069',
+            '6128 Lookaway Cir LOT 208, Franklin, TN 37067',
+            '8100 Turning Point Dr LOT 14, Brentwood, TN 37027',
+            '8103 Turning Point Dr LOT 12, Brentwood, TN 37027',
+            '7116 Bonterra Dr, Franklin, TN 37064',
+            '1013 Buena Vista Dr, Franklin, TN 37069',
+            '5603 Winslet Dr, Franklin, TN 37064',
+            '9222 Lehigh Dr, Brentwood, TN 37027',
+            '460 Tinnan Ave, Franklin, TN 37067'
+        ];
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Property Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-          {currentProperties.map((property) => (
-            <PropertyCard key={property.id} property={property} />
-          ))}
-        </div>
+        let properties = [];
+        let currentPage = 1;
+        const PROPERTIES_PER_PAGE = 75;
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="p-2 rounded-lg bg-white shadow hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
+        // Generate mock properties
+        function generateProperties() {
+            const mockData = [];
+            const cities = ['Nashville', 'Brentwood', 'Franklin', 'College Grove'];
+            const streets = ['Oak Ridge', 'Maple Grove', 'Elm Creek', 'Pine Valley', 'Cedar Hills'];
             
-            <div className="flex gap-1">
-              {[...Array(Math.min(totalPages, 5))].map((_, index) => {
+            // Add properties of interest first
+            propertiesOfInterest.forEach((address, index) => {
+                mockData.push({
+                    id: `interest-${index}`,
+                    address: address,
+                    price: 2000000 + Math.floor(Math.random() * 3000000),
+                    beds: Math.floor(Math.random() * 3) + 3,
+                    baths: Math.floor(Math.random() * 2) + 2.5,
+                    sqft: Math.floor(Math.random() * 3000) + 3500,
+                    image: `https://picsum.photos/400/300?random=${index}`,
+                    zillowUrl: `https://www.zillow.com/homes/${address.replace(/\s+/g, '-')}`,
+                    isInterest: true,
+                    description: 'Premium estate property with luxury finishes and resort-style amenities'
+                });
+            });
+            
+            // Generate additional properties
+            for (let i = propertiesOfInterest.length; i < 375; i++) {
+                const city = cities[Math.floor(Math.random() * cities.length)];
+                const street = streets[Math.floor(Math.random() * streets.length)];
+                mockData.push({
+                    id: `prop-${i}`,
+                    address: `${1000 + i} ${street} Dr, ${city}, TN ${37000 + Math.floor(Math.random() * 100)}`,
+                    price: 2000000 + Math.floor(Math.random() * 3000000),
+                    beds: Math.floor(Math.random() * 3) + 3,
+                    baths: Math.floor(Math.random() * 2) + 2.5,
+                    sqft: Math.floor(Math.random() * 3000) + 3500,
+                    image: `https://picsum.photos/400/300?random=${i + 100}`,
+                    zillowUrl: `https://www.zillow.com/homedetails/property-${i}`,
+                    isInterest: false,
+                    description: 'Beautiful home in prime location with modern updates'
+                });
+            }
+            
+            return mockData.sort((a, b) => a.price - b.price);
+        }
+
+        function formatPrice(price) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+            }).format(price);
+        }
+
+        function createPropertyCard(property) {
+            return `
+                <div class="property-card">
+                    ${property.isInterest ? '<div class="interest-badge">⭐ Property of Interest</div>' : ''}
+                    <div class="image-container">
+                        <img src="${property.image}" alt="${property.address}" class="property-image">
+                        <div class="price-badge">${formatPrice(property.price)}</div>
+                    </div>
+                    <div class="property-details">
+                        <div class="property-address">${property.address}</div>
+                        <div class="property-stats">
+                            <div class="stat-item">🛏️ ${property.beds} beds</div>
+                            <div class="stat-item">🚿 ${property.baths} baths</div>
+                            <div class="stat-item">📐 ${property.sqft.toLocaleString()} sqft</div>
+                        </div>
+                        <div class="action-buttons">
+                            <a href="${property.zillowUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+                                🔗 Zillow
+                            </a>
+                            <button class="btn btn-secondary" onclick='showPropertyDetails(${JSON.stringify(property).replace(/'/g, "&apos;")})'>
+                                ℹ️ Details
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderProperties() {
+            const grid = document.getElementById('property-grid');
+            const startIndex = (currentPage - 1) * PROPERTIES_PER_PAGE;
+            const endIndex = startIndex + PROPERTIES_PER_PAGE;
+            const currentProperties = properties.slice(startIndex, endIndex);
+            
+            grid.innerHTML = currentProperties.map(createPropertyCard).join('');
+            
+            // Update stats
+            document.getElementById('showing-stats').textContent = 
+                `Showing ${startIndex + 1}-${Math.min(endIndex, properties.length)} of ${properties.length} properties`;
+            
+            renderPagination();
+        }
+
+        function renderPagination() {
+            const pagination = document.getElementById('pagination');
+            const totalPages = Math.ceil(properties.length / PROPERTIES_PER_PAGE);
+            
+            let html = `
+                <button class="page-btn" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
+                    ←
+                </button>
+            `;
+            
+            for (let i = 1; i <= Math.min(5, totalPages); i++) {
                 let pageNum;
                 if (totalPages <= 5) {
-                  pageNum = index + 1;
+                    pageNum = i;
                 } else if (currentPage <= 3) {
-                  pageNum = index + 1;
+                    pageNum = i;
                 } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + index;
+                    pageNum = totalPages - 5 + i;
                 } else {
-                  pageNum = currentPage - 2 + index;
+                    pageNum = currentPage - 3 + i;
                 }
                 
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`px-3 py-1 rounded-lg transition-all ${
-                      currentPage === pageNum
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white shadow hover:shadow-md'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-            </div>
+                html += `
+                    <button class="page-btn ${currentPage === pageNum ? 'active' : ''}" onclick="changePage(${pageNum})">
+                        ${pageNum}
+                    </button>
+                `;
+            }
             
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="p-2 rounded-lg bg-white shadow hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-        )}
-      </main>
+            html += `
+                <button class="page-btn" onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
+                    →
+                </button>
+            `;
+            
+            pagination.innerHTML = html;
+        }
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-8 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm">© Bill & Cyndee Verhelle, All Rights Reserved</p>
-        </div>
-      </footer>
+        function changePage(page) {
+            const totalPages = Math.ceil(properties.length / PROPERTIES_PER_PAGE);
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            renderProperties();
+            window.scrollTo(0, 0);
+        }
 
-      {/* Property Details Modal */}
-      {showDetails && (
-        <PropertyDetailsModal 
-          property={selectedProperty} 
-          onClose={() => {
-            setShowDetails(false);
-            setSelectedProperty(null);
-          }}
-        />
-      )}
-    </div>
-  );
-};
+        function showPropertyDetails(property) {
+            const modal = document.getElementById('modal');
+            const modalBody = document.getElementById('modal-body');
+            
+            modalBody.innerHTML = `
+                <img src="${property.image}" alt="${property.address}" style="width: 100%; border-radius: 8px; margin-bottom: 16px;">
+                <h3 style="font-size: 24px; margin-bottom: 8px;">${formatPrice(property.price)}</h3>
+                <p style="color: #6b7280; margin-bottom: 16px;">📍 ${property.address}</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 16px 0; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 24px;">🛏️</div>
+                        <div style="font-size: 18px; font-weight: 600;">${property.beds}</div>
+                        <div style="font-size: 12px; color: #6b7280;">Bedrooms</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 24px;">🚿</div>
+                        <div style="font-size: 18px; font-weight: 600;">${property.baths}</div>
+                        <div style="font-size: 12px; color: #6b7280;">Bathrooms</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 24px;">📐</div>
+                        <div style="font-size: 18px; font-weight: 600;">${property.sqft.toLocaleString()}</div>
+                        <div style="font-size: 12px; color: #6b7280;">Square Feet</div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <h4 style="margin-bottom: 8px;">Description</h4>
+                    <p style="color: #6b7280;">${property.description}</p>
+                </div>
+                <a href="${property.zillowUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="width: 100%; margin-top: 16px;">
+                    🔗 View on Zillow
+                </a>
+            `;
+            
+            modal.classList.add('active');
+        }
 
-export default NashvilleRealEstate;
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // Initialize
+        setTimeout(() => {
+            properties = generateProperties();
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('property-grid').style.display = 'grid';
+            document.getElementById('pagination').style.display = 'flex';
+            renderProperties();
+        }, 1500);
+    </script>
+</body>
+</html>
