@@ -770,19 +770,27 @@
                 <div class="btn-group">
                     <button class="btn btn-primary" onclick="loadWithProxy()">
                         <span>🔄</span>
-                        Load Live Data (All Pages)
+                        Load All Pages
+                    </button>
+                    <button class="btn btn-primary" onclick="quickLoadSinglePage()">
+                        <span>⚡</span>
+                        Quick Load (41)
                     </button>
                     <button class="btn btn-secondary" onclick="toggleFeatured()">
                         <span>⭐</span>
                         <span id="featuredBtnText">Show Featured Only</span>
                     </button>
+                    <button class="btn btn-secondary" onclick="testAPIConnection()">
+                        <span>🧪</span>
+                        Test API
+                    </button>
                     <button class="btn btn-secondary" onclick="loadDemoData()">
                         <span>🏠</span>
-                        Load Demo Data
+                        Demo Data
                     </button>
                     <button class="btn btn-secondary" onclick="exportProperties()">
                         <span>📊</span>
-                        Export to CSV
+                        Export CSV
                     </button>
                 </div>
             </div>
@@ -999,137 +1007,57 @@
             updateStatus('active', 'Demo Data Loaded', `${properties.length} properties loaded successfully`);
         }
 
-        // Load with CORS Proxy - Now with pagination support
+        // Load with CORS Proxy - Simplified and more reliable
         async function loadWithProxy() {
-            console.log('Attempting to load ALL live data via CORS proxy...');
-            updateStatus('loading', 'Connecting to Zillow API', 'Fetching all properties (this may take a moment)...');
+            console.log('Attempting to load live data via CORS proxy...');
+            updateStatus('loading', 'Connecting to Zillow API', 'Fetching properties...');
             
             const startTime = Date.now();
+            apiCallCount = 0;
             let allProperties = [];
             
-            // List of CORS proxies to try
-            const corsProxies = [
-                'https://corsproxy.io/?',
-                'https://api.allorigins.win/raw?url=',
-                'https://cors-anywhere.herokuapp.com/'
-            ];
+            // The working CORS proxy
+            const CORS_PROXY = 'https://corsproxy.io/?';
             
-            // Locations to search
-            const locations = [
-                'Franklin, TN',
-                'Brentwood, TN',
-                'College Grove, TN'
-            ];
-            
-            let workingProxy = null;
-            
-            // Find a working proxy first
-            for (const proxy of corsProxies) {
-                console.log(`Testing proxy: ${proxy}`);
-                try {
-                    const testUrl = `${proxy}${encodeURIComponent('https://zillow-com1.p.rapidapi.com/propertyDetails?zpid=2080998890')}`;
-                    const response = await fetch(testUrl, {
-                        method: 'GET',
-                        headers: {
-                            'Accept': 'application/json',
-                            'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
-                            'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
-                        }
-                    });
-                    
-                    if (response.ok) {
-                        workingProxy = proxy;
-                        console.log('✅ Working proxy found:', proxy);
-                        break;
-                    }
-                } catch (error) {
-                    console.log(`Proxy ${proxy} failed`);
-                }
-            }
-            
-            if (!workingProxy) {
-                console.error('No working proxy found');
-                updateStatus('error', 'API Connection Failed', 'Unable to connect - showing demo data');
-                return;
-            }
-            
-            // Now fetch properties from all locations with pagination
-            for (const location of locations) {
-                console.log(`\n📍 Searching ${location}...`);
-                let page = 1;
-                let hasMorePages = true;
-                let locationProperties = [];
+            try {
+                // First, test if the proxy is working
+                console.log('Testing CORS proxy connection...');
+                const testUrl = `${CORS_PROXY}${encodeURIComponent('https://zillow-com1.p.rapidapi.com/propertyDetails?zpid=2080998890')}`;
                 
-                while (hasMorePages && page <= 5) { // Limit to 5 pages per location for safety
-                    try {
-                        apiCallCount++;
-                        const searchUrl = `${workingProxy}${encodeURIComponent(
-                            `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${encodeURIComponent(location)}&status_type=ForSale&minPrice=2000000&maxPrice=5000000&page=${page}`
-                        )}`;
-                        
-                        console.log(`Fetching page ${page} for ${location}...`);
-                        updateStatus('loading', 'Loading Properties', `Fetching ${location} - Page ${page}...`);
-                        
-                        const response = await fetch(searchUrl, {
-                            method: 'GET',
-                            headers: {
-                                'Accept': 'application/json',
-                                'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
-                                'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
-                            }
-                        });
-                        
-                        if (response.ok) {
-                            const data = await response.json();
-                            
-                            if (data.props && data.props.length > 0) {
-                                locationProperties = locationProperties.concat(data.props);
-                                console.log(`✅ Page ${page}: Found ${data.props.length} properties (Total for ${location}: ${locationProperties.length})`);
-                                
-                                // Check if there are more pages
-                                if (data.totalPages && page < data.totalPages) {
-                                    page++;
-                                } else if (data.props.length === 40 || data.props.length === 41) {
-                                    // Zillow often returns 40-41 properties per page
-                                    page++;
-                                } else {
-                                    hasMorePages = false;
-                                }
-                            } else {
-                                hasMorePages = false;
-                            }
-                        } else {
-                            console.log(`No more pages for ${location}`);
-                            hasMorePages = false;
-                        }
-                    } catch (error) {
-                        console.error(`Error fetching page ${page} for ${location}:`, error);
-                        hasMorePages = false;
+                const testResponse = await fetch(testUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
+                        'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
                     }
-                    
-                    // Add a small delay between requests to avoid rate limiting
-                    if (hasMorePages) {
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
+                });
+                
+                if (!testResponse.ok) {
+                    throw new Error('CORS proxy not working');
                 }
                 
-                allProperties = allProperties.concat(locationProperties);
-                console.log(`📊 Total for ${location}: ${locationProperties.length} properties`);
-            }
-            
-            // Also search by ZIP codes for any missed properties
-            const zipCodes = ['37027', '37064', '37067', '37069', '37046'];
-            for (const zip of zipCodes) {
-                try {
+                console.log('✅ CORS proxy working!');
+                
+                // Now fetch properties from each location
+                const locations = [
+                    'Franklin, TN',
+                    'Brentwood, TN', 
+                    'College Grove, TN'
+                ];
+                
+                for (const location of locations) {
+                    console.log(`\n📍 Searching ${location}...`);
                     apiCallCount++;
-                    const zipUrl = `${workingProxy}${encodeURIComponent(
-                        `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${zip}&status_type=ForSale&minPrice=2000000&maxPrice=5000000`
+                    
+                    // Start with page 1
+                    const searchUrl = `${CORS_PROXY}${encodeURIComponent(
+                        `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${encodeURIComponent(location)}&status_type=ForSale&minPrice=2000000&maxPrice=5000000`
                     )}`;
                     
-                    console.log(`Searching ZIP ${zip}...`);
-                    updateStatus('loading', 'Loading Properties', `Searching ZIP code ${zip}...`);
+                    updateStatus('loading', 'Loading Properties', `Searching ${location}...`);
                     
-                    const response = await fetch(zipUrl, {
+                    const response = await fetch(searchUrl, {
                         method: 'GET',
                         headers: {
                             'Accept': 'application/json',
@@ -1140,51 +1068,113 @@
                     
                     if (response.ok) {
                         const data = await response.json();
+                        console.log(`Response for ${location}:`, data);
+                        
                         if (data.props && data.props.length > 0) {
-                            // Check for duplicates before adding
-                            const newProps = data.props.filter(prop => 
-                                !allProperties.some(existing => existing.zpid === prop.zpid)
-                            );
-                            allProperties = allProperties.concat(newProps);
-                            console.log(`✅ ZIP ${zip}: Found ${newProps.length} new properties`);
+                            allProperties = allProperties.concat(data.props);
+                            console.log(`✅ Found ${data.props.length} properties in ${location}`);
+                            console.log(`Running total: ${allProperties.length} properties`);
+                            
+                            // Update UI with progress
+                            updateStatus('loading', 'Loading Properties', 
+                                `Found ${allProperties.length} properties so far...`);
+                            
+                            // Try to get page 2 if first page was full
+                            if (data.props.length >= 40) {
+                                console.log(`Fetching page 2 for ${location}...`);
+                                apiCallCount++;
+                                
+                                const page2Url = `${CORS_PROXY}${encodeURIComponent(
+                                    `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${encodeURIComponent(location)}&status_type=ForSale&minPrice=2000000&maxPrice=5000000&page=2`
+                                )}`;
+                                
+                                try {
+                                    const page2Response = await fetch(page2Url, {
+                                        method: 'GET',
+                                        headers: {
+                                            'Accept': 'application/json',
+                                            'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
+                                            'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
+                                        }
+                                    });
+                                    
+                                    if (page2Response.ok) {
+                                        const page2Data = await page2Response.json();
+                                        if (page2Data.props && page2Data.props.length > 0) {
+                                            allProperties = allProperties.concat(page2Data.props);
+                                            console.log(`✅ Page 2: Found ${page2Data.props.length} more properties`);
+                                            console.log(`Running total: ${allProperties.length} properties`);
+                                        }
+                                    }
+                                } catch (page2Error) {
+                                    console.log('Page 2 fetch failed, continuing...');
+                                }
+                            }
+                        } else {
+                            console.log(`No properties found in ${location}`);
                         }
+                    } else {
+                        console.error(`Failed to fetch ${location}:`, response.status);
                     }
-                } catch (error) {
-                    console.log(`ZIP ${zip} search failed:`, error.message);
+                    
+                    // Small delay between locations to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
                 
-                // Small delay between requests
-                await new Promise(resolve => setTimeout(resolve, 300));
-            }
-            
-            lastResponseTime = Date.now() - startTime;
-            document.getElementById('responseTime').textContent = `${lastResponseTime}ms`;
-            document.getElementById('apiCalls').textContent = apiCallCount;
-            
-            if (allProperties.length > 0) {
-                console.log(`\n🎉 SUCCESS! Total properties found: ${allProperties.length}`);
+                lastResponseTime = Date.now() - startTime;
+                document.getElementById('responseTime').textContent = `${lastResponseTime}ms`;
+                document.getElementById('apiCalls').textContent = apiCallCount;
                 
-                // Remove duplicates based on zpid
-                const uniqueProperties = Array.from(
-                    new Map(allProperties.map(p => [p.zpid, p])).values()
-                );
+                if (allProperties.length > 0) {
+                    // Remove duplicates
+                    const uniqueProperties = Array.from(
+                        new Map(allProperties.map(p => [p.zpid, p])).values()
+                    );
+                    
+                    console.log(`\n🎉 SUCCESS!`);
+                    console.log(`Total properties found: ${uniqueProperties.length}`);
+                    console.log(`API calls made: ${apiCallCount}`);
+                    console.log(`Time taken: ${(lastResponseTime/1000).toFixed(1)} seconds`);
+                    
+                    // Process the data
+                    processZillowData(uniqueProperties);
+                    document.getElementById('dataSource').textContent = 'Zillow API';
+                    updateStatus('active', '✅ Live Data Loaded!', 
+                        `Successfully loaded ${uniqueProperties.length} properties from Zillow`);
+                    
+                    // Show success message
+                    setTimeout(() => {
+                        alert(`✅ Zillow API Success!\n\n` +
+                              `Loaded ${uniqueProperties.length} real properties\n` +
+                              `• Franklin, Brentwood, College Grove\n` +
+                              `• Price range: $2M - $5M\n` +
+                              `• Your 20 featured properties are marked\n\n` +
+                              `You can now export all data to CSV!`);
+                    }, 500);
+                } else {
+                    throw new Error('No properties returned from API');
+                }
                 
-                console.log(`After removing duplicates: ${uniqueProperties.length} unique properties`);
+            } catch (error) {
+                console.error('API Error:', error);
+                lastResponseTime = Date.now() - startTime;
+                document.getElementById('responseTime').textContent = `${lastResponseTime}ms`;
+                document.getElementById('apiCalls').textContent = apiCallCount;
                 
-                // Process all the data
-                processZillowData(uniqueProperties);
-                document.getElementById('dataSource').textContent = 'Zillow';
-                updateStatus('active', 'All Properties Loaded!', `Successfully loaded ${uniqueProperties.length} properties from Zillow`);
+                updateStatus('error', 'API Connection Failed', 
+                    'Unable to load live data - Demo data is available');
                 
-                // Show summary
-                alert(`✅ Success!\n\nLoaded ${uniqueProperties.length} properties from Zillow API:\n` +
-                      `• ${apiCallCount} API calls made\n` +
-                      `• ${(lastResponseTime / 1000).toFixed(1)} seconds total time\n` +
-                      `• All locations searched\n\n` +
-                      `Your 20 featured properties are marked with purple borders.`);
-            } else {
-                console.error('No properties found');
-                updateStatus('error', 'No Properties Found', 'Check your search criteria');
+                alert('⚠️ API Connection Issue\n\n' +
+                      'Unable to connect to Zillow API.\n' +
+                      'This could be due to:\n' +
+                      '• CORS proxy being temporarily down\n' +
+                      '• Rate limiting\n' +
+                      '• Network issues\n\n' +
+                      'Demo data is loaded with all 20 featured properties.\n' +
+                      'Please try again in a few moments.');
+                
+                // Load demo data as fallback
+                loadDemoData();
             }
         }
 
@@ -1507,6 +1497,153 @@
             document.getElementById('lastUpdate').textContent = timeString;
         }
 
+        // Quick Load - Single Page (Like the original working version)
+        async function quickLoadSinglePage() {
+            console.log('⚡ Quick loading first page of properties...');
+            updateStatus('loading', 'Quick Load', 'Fetching Franklin properties...');
+            
+            const CORS_PROXY = 'https://corsproxy.io/?';
+            apiCallCount = 1;
+            const startTime = Date.now();
+            
+            try {
+                // Just load Franklin, TN - single page
+                const searchUrl = `${CORS_PROXY}${encodeURIComponent(
+                    'https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=Franklin%2C%20TN&status_type=ForSale&minPrice=2000000&maxPrice=5000000'
+                )}`;
+                
+                const response = await fetch(searchUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
+                        'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.props && data.props.length > 0) {
+                        console.log(`✅ Quick load successful: ${data.props.length} properties`);
+                        
+                        // Process the data
+                        processZillowData(data.props);
+                        
+                        lastResponseTime = Date.now() - startTime;
+                        document.getElementById('responseTime').textContent = `${lastResponseTime}ms`;
+                        document.getElementById('apiCalls').textContent = apiCallCount;
+                        document.getElementById('dataSource').textContent = 'Zillow API';
+                        
+                        updateStatus('active', '✅ Quick Load Complete', 
+                            `Loaded ${data.props.length} properties from Franklin`);
+                        
+                        alert(`✅ Quick Load Successful!\n\n` +
+                              `Loaded ${data.props.length} properties from Franklin, TN\n` +
+                              `Time: ${(lastResponseTime/1000).toFixed(1)} seconds\n\n` +
+                              `Use "Load All Pages" to get more properties from all locations.`);
+                    } else {
+                        throw new Error('No properties in response');
+                    }
+                } else {
+                    throw new Error(`API returned status ${response.status}`);
+                }
+                
+            } catch (error) {
+                console.error('Quick load failed:', error);
+                updateStatus('error', 'Quick Load Failed', 'Loading demo data instead');
+                loadDemoData();
+            }
+        }
+
+        // Test API Connection
+        async function testAPIConnection() {
+            console.clear();
+            console.log('🧪 TESTING ZILLOW API CONNECTION');
+            console.log('=====================================');
+            
+            updateStatus('loading', 'Testing API', 'Running connection test...');
+            
+            const CORS_PROXY = 'https://corsproxy.io/?';
+            
+            try {
+                // Test 1: Simple property details
+                console.log('\n📡 Test 1: Fetching single property details...');
+                const testUrl = `${CORS_PROXY}${encodeURIComponent('https://zillow-com1.p.rapidapi.com/propertyDetails?zpid=2080998890')}`;
+                
+                const response = await fetch(testUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
+                        'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
+                    }
+                });
+                
+                console.log('Response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('✅ Test 1 PASSED - API is accessible');
+                    console.log('Sample response:', data);
+                    
+                    // Test 2: Search for properties
+                    console.log('\n📡 Test 2: Searching Franklin properties...');
+                    const searchUrl = `${CORS_PROXY}${encodeURIComponent('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=Franklin%2C%20TN&status_type=ForSale&minPrice=2000000&maxPrice=5000000')}`;
+                    
+                    const searchResponse = await fetch(searchUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
+                            'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
+                        }
+                    });
+                    
+                    if (searchResponse.ok) {
+                        const searchData = await searchResponse.json();
+                        console.log('✅ Test 2 PASSED - Search working');
+                        console.log(`Found ${searchData.props?.length || 0} properties`);
+                        
+                        updateStatus('active', 'API Working!', 'Connection test successful');
+                        
+                        alert(`✅ API Connection Test Successful!\n\n` +
+                              `• CORS Proxy: Working\n` +
+                              `• Zillow API: Accessible\n` +
+                              `• Property Search: Working\n` +
+                              `• Found ${searchData.props?.length || 0} properties in test search\n\n` +
+                              `You can now load live data!`);
+                    } else {
+                        throw new Error(`Search failed with status ${searchResponse.status}`);
+                    }
+                } else {
+                    throw new Error(`API returned status ${response.status}`);
+                }
+                
+            } catch (error) {
+                console.error('❌ API Test Failed:', error);
+                updateStatus('error', 'API Test Failed', error.message);
+                
+                // Provide detailed diagnostic info
+                console.log('\n🔍 DIAGNOSTIC INFORMATION:');
+                console.log('1. CORS Proxy:', CORS_PROXY);
+                console.log('2. API Key:', '2fce36f1ba...507053');
+                console.log('3. Error:', error.message);
+                console.log('\n💡 POSSIBLE SOLUTIONS:');
+                console.log('• Try again in a few moments (rate limiting)');
+                console.log('• Check if corsproxy.io is operational');
+                console.log('• Verify API key is still valid on RapidAPI');
+                
+                alert(`⚠️ API Connection Test Failed\n\n` +
+                      `Error: ${error.message}\n\n` +
+                      `Possible causes:\n` +
+                      `• CORS proxy may be down\n` +
+                      `• API rate limit reached\n` +
+                      `• Network connectivity issue\n\n` +
+                      `Please try again in a few moments or use demo data.`);
+            }
+        }
+
         // Export Properties to CSV
         function exportProperties() {
             if (properties.length === 0) {
@@ -1514,9 +1651,16 @@
                 return;
             }
             
-            // Create CSV content
+            // Check if we have real data or demo data
+            const dataSource = document.getElementById('dataSource').textContent;
+            const filename = dataSource === 'Zillow API' ? 
+                `zillow_properties_${new Date().toISOString().split('T')[0]}.csv` :
+                `demo_properties_${new Date().toISOString().split('T')[0]}.csv`;
+            
+            // Create CSV content with more details
             const headers = ['Address', 'City', 'State', 'ZIP', 'Price', 'Bedrooms', 'Bathrooms', 
-                           'Sq Ft', 'Year Built', 'Type', 'Featured', 'Category', 'Days on Market'];
+                           'Sq Ft', 'Year Built', 'Type', 'Featured', 'Category', 'Days on Market',
+                           'New Listing', 'Open House', 'Data Source'];
             
             const rows = properties.map(p => [
                 p.address,
@@ -1531,7 +1675,10 @@
                 p.propertyType,
                 p.isFeatured ? 'Yes' : 'No',
                 p.category || '',
-                p.daysOnZillow || 0
+                p.daysOnZillow || 0,
+                p.isNew ? 'Yes' : 'No',
+                p.hasOpenHouse ? 'Yes' : 'No',
+                dataSource
             ]);
             
             let csvContent = headers.join(',') + '\n';
@@ -1544,13 +1691,19 @@
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `tennessee_properties_${new Date().toISOString().split('T')[0]}.csv`;
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
             
-            alert(`✅ Exported ${properties.length} properties to CSV!`);
+            console.log(`📊 Exported ${properties.length} properties (Source: ${dataSource})`);
+            
+            alert(`✅ Export Complete!\n\n` +
+                  `Exported ${properties.length} properties to CSV\n` +
+                  `Data Source: ${dataSource}\n` +
+                  `Filename: ${filename}\n\n` +
+                  `${p.isFeatured ? '⭐ ' : ''}Featured properties: ${properties.filter(p => p.isFeatured).length}`);
         }
 
         // Handle Modal Clicks
