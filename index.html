@@ -414,7 +414,9 @@ async function fetchRealProperties() {
     return null;
 }
         // Generate mock properties
-        function generateProperties() {
+        async function generateProperties() {
+    const realData = await fetchRealProperties();
+    if (realData) return realData;
             const mockData = [];
             const cities = ['Nashville', 'Brentwood', 'Franklin', 'College Grove'];
             const streets = ['Oak Ridge', 'Maple Grove', 'Elm Creek', 'Pine Valley', 'Cedar Hills'];
