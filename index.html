@@ -384,7 +384,35 @@
         let properties = [];
         let currentPage = 1;
         const PROPERTIES_PER_PAGE = 75;
+// CONNECT TO ZILLOW API
+const API_ENDPOINT = 'https://zillow-backend.vercel.app/api/properties';
 
+// Try to fetch real data from API
+async function fetchRealProperties() {
+    try {
+        const response = await fetch(API_ENDPOINT);
+        if (response.ok) {
+            const data = await response.json();
+            if (data.results) {
+                return data.results.map(prop => ({
+                    id: 'zillow-' + Math.random(),
+                    address: prop.address || 'Nashville Property',
+                    price: prop.price || 2500000,
+                    beds: prop.beds || 4,
+                    baths: prop.baths || 3,
+                    sqft: prop.sqft || 4000,
+                    image: prop.imgSrc || 'https://picsum.photos/400/300?random=' + Math.random(),
+                    zillowUrl: prop.detailUrl || 'https://zillow.com',
+                    isInterest: false,
+                    description: 'Luxury property'
+                }));
+            }
+        }
+    } catch (e) {
+        console.log('Using demo data');
+    }
+    return null;
+}
         // Generate mock properties
         function generateProperties() {
             const mockData = [];
