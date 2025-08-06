@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, ExternalLink, Info, ChevronLeft, ChevronRight, Home, MapPin, DollarSign, Bed, Bath, Square } from 'lucide-react';
+import { Star, ExternalLink, Info, ChevronLeft, ChevronRight, Home, MapPin, DollarSign, Bed, Bath, Square, AlertCircle, RefreshCw } from 'lucide-react';
 
 const NashvilleRealEstate = () => {
   const [properties, setProperties] = useState([]);
@@ -8,8 +8,18 @@ const NashvilleRealEstate = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [apiStatus, setApiStatus] = useState('Connecting to Zillow API...');
   
   const PROPERTIES_PER_PAGE = 75;
+  
+  // API Configuration
+  const API_CONFIG = {
+    endpoint: 'https://zillow-com1.p.rapidapi.com/marketData',
+    headers: {
+      'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
+      'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
+    }
+  };
   
   // Properties of interest from your document
   const propertiesOfInterest = [
@@ -35,63 +45,182 @@ const NashvilleRealEstate = () => {
     '460 Tinnan Ave, Franklin, TN 37067'
   ];
 
-  // Generate mock data for demonstration (in production, this would come from Zillow API)
-  useEffect(() => {
-    const generateMockProperties = () => {
-      const mockData = [];
-      const cities = ['Nashville', 'Brentwood', 'Franklin', 'College Grove'];
-      const streets = ['Oak', 'Maple', 'Elm', 'Pine', 'Cedar', 'Birch', 'Willow', 'Cherry'];
-      
-      // Add properties of interest first
-      propertiesOfInterest.forEach((address, index) => {
-        mockData.push({
-          id: `special-${index}`,
-          address: address,
-          price: 2000000 + Math.random() * 3000000,
-          beds: Math.floor(Math.random() * 3) + 3,
-          baths: Math.floor(Math.random() * 2) + 2.5,
-          sqft: Math.floor(Math.random() * 3000) + 3500,
-          image: `https://picsum.photos/400/300?random=${index}`,
-          zillowUrl: `https://www.zillow.com/homedetails/${index}`,
-          isInterest: true,
-          description: 'Luxury estate property with premium finishes and amenities'
+  // Fetch properties from Zillow API
+  const fetchPropertiesFromAPI = async () => {
+    const locations = [
+      { city: 'Nashville', state: 'TN', resourceId: '32810' },
+      { city: 'Brentwood', state: 'TN', resourceId: '10221' },
+      { city: 'Franklin', state: 'TN', resourceId: '26140' },
+      { city: 'College Grove', state: 'TN', resourceId: '32847' }
+    ];
+
+    const allProperties = [];
+    
+    for (const location of locations) {
+      try {
+        setApiStatus(`Fetching properties from ${location.city}, ${location.state}...`);
+        
+        // Construct API URL with parameters
+        const params = new URLSearchParams({
+          resourceId: location.resourceId,
+          beds: '0',
+          propertyTypes: 'house',
+          minPrice: '2000000',
+          maxPrice: '5000000',
+          sort: 'price'
         });
-      });
-      
-      // Generate additional properties to reach 375 total
-      for (let i = propertiesOfInterest.length; i < 375; i++) {
-        const city = cities[Math.floor(Math.random() * cities.length)];
-        const street = streets[Math.floor(Math.random() * streets.length)];
-        mockData.push({
-          id: `prop-${i}`,
-          address: `${1000 + i} ${street} ${Math.random() > 0.5 ? 'Dr' : 'Ln'}, ${city}, TN ${37000 + Math.floor(Math.random() * 100)}`,
-          price: 2000000 + Math.random() * 3000000,
-          beds: Math.floor(Math.random() * 3) + 3,
-          baths: Math.floor(Math.random() * 2) + 2.5,
-          sqft: Math.floor(Math.random() * 3000) + 3500,
-          image: `https://picsum.photos/400/300?random=${i}`,
-          zillowUrl: `https://www.zillow.com/homedetails/${i}`,
-          isInterest: false,
-          description: 'Beautiful home in prime location with modern amenities'
+
+        const response = await fetch(`${API_CONFIG.endpoint}?${params}`, {
+          method: 'GET',
+          headers: API_CONFIG.headers
         });
+
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data && data.results) {
+          const formattedProperties = data.results.map((prop, index) => ({
+            id: `${location.city}-${index}`,
+            address: `${prop.address || ''}, ${location.city}, ${location.state} ${prop.zipcode || ''}`.trim(),
+            price: prop.price || prop.zestimate || 2500000,
+            beds: prop.bedrooms || 4,
+            baths: prop.bathrooms || 3,
+            sqft: prop.livingArea || 4000,
+            image: prop.imgSrc || `https://picsum.photos/400/300?random=${index}`,
+            zillowUrl: prop.detailUrl || `https://www.zillow.com/homedetails/${prop.zpid}`,
+            isInterest: false,
+            description: prop.description || 'Luxury property in prime Nashville area location',
+            zpid: prop.zpid,
+            propertyType: prop.homeType || 'Single Family',
+            yearBuilt: prop.yearBuilt,
+            lotSize: prop.lotAreaValue,
+            listingStatus: prop.homeStatus
+          }));
+          
+          allProperties.push(...formattedProperties);
+        }
+      } catch (err) {
+        console.error(`Error fetching ${location.city} properties:`, err);
+        // Continue with other locations even if one fails
       }
+    }
+
+    return allProperties;
+  };
+
+  // Generate fallback mock data if API fails
+  const generateFallbackData = () => {
+    const mockData = [];
+    const cities = ['Nashville', 'Brentwood', 'Franklin', 'College Grove'];
+    const streets = ['Oak Ridge', 'Maple Grove', 'Elm Creek', 'Pine Valley', 'Cedar Hills', 'Birch Lane', 'Willow Springs', 'Cherry Blossom'];
+    
+    // Add properties of interest first with realistic data
+    propertiesOfInterest.forEach((address, index) => {
+      mockData.push({
+        id: `interest-${index}`,
+        address: address,
+        price: 2000000 + Math.floor(Math.random() * 3000000),
+        beds: Math.floor(Math.random() * 3) + 3,
+        baths: Math.floor(Math.random() * 2) + 2.5,
+        sqft: Math.floor(Math.random() * 3000) + 3500,
+        image: `https://picsum.photos/400/300?random=${index}`,
+        zillowUrl: `https://www.zillow.com/homes/${address.replace(/\s+/g, '-')}`,
+        isInterest: true,
+        description: 'Premium estate property featuring luxury finishes, gourmet kitchen, and resort-style amenities',
+        propertyType: 'Single Family',
+        yearBuilt: 2015 + Math.floor(Math.random() * 8),
+        lotSize: (0.5 + Math.random() * 2).toFixed(2) + ' acres',
+        listingStatus: 'For Sale'
+      });
+    });
+    
+    // Generate additional properties
+    for (let i = propertiesOfInterest.length; i < 375; i++) {
+      const city = cities[Math.floor(Math.random() * cities.length)];
+      const street = streets[Math.floor(Math.random() * streets.length)];
+      mockData.push({
+        id: `prop-${i}`,
+        address: `${1000 + i} ${street} ${Math.random() > 0.5 ? 'Dr' : 'Ln'}, ${city}, TN ${37000 + Math.floor(Math.random() * 100)}`,
+        price: 2000000 + Math.floor(Math.random() * 3000000),
+        beds: Math.floor(Math.random() * 3) + 3,
+        baths: Math.floor(Math.random() * 2) + 2.5,
+        sqft: Math.floor(Math.random() * 3000) + 3500,
+        image: `https://picsum.photos/400/300?random=${i + 100}`,
+        zillowUrl: `https://www.zillow.com/homedetails/property-${i}`,
+        isInterest: false,
+        description: 'Elegant home in desirable neighborhood with modern updates and premium features',
+        propertyType: 'Single Family',
+        yearBuilt: 2010 + Math.floor(Math.random() * 13),
+        lotSize: (0.25 + Math.random() * 1.5).toFixed(2) + ' acres',
+        listingStatus: 'For Sale'
+      });
+    }
+    
+    return mockData.sort((a, b) => a.price - b.price);
+  };
+
+  // Load properties on component mount
+  useEffect(() => {
+    const loadProperties = async () => {
+      setLoading(true);
+      setError(null);
       
-      // Sort by price (low to high)
-      return mockData.sort((a, b) => a.price - b.price);
+      try {
+        // Try to fetch from API first
+        const apiProperties = await fetchPropertiesFromAPI();
+        
+        if (apiProperties.length > 0) {
+          setApiStatus(`Successfully loaded ${apiProperties.length} properties from Zillow`);
+          
+          // Mark properties of interest
+          const processedProperties = apiProperties.map(prop => {
+            const isInterest = propertiesOfInterest.some(addr => 
+              prop.address.toLowerCase().includes(addr.toLowerCase())
+            );
+            return { ...prop, isInterest };
+          });
+          
+          // Sort by price
+          const sortedProperties = processedProperties.sort((a, b) => a.price - b.price);
+          setProperties(sortedProperties);
+        } else {
+          // If API returns no data, use fallback
+          throw new Error('No properties returned from API');
+        }
+      } catch (err) {
+        console.error('API Error:', err);
+        setApiStatus('Using demo data (API connection issue - check CORS/network)');
+        
+        // Use fallback data
+        const fallbackData = generateFallbackData();
+        setProperties(fallbackData);
+        
+        setError(
+          <div className="text-sm">
+            <p className="font-semibold mb-1">API Connection Notice:</p>
+            <p>Currently displaying demo data. The Zillow API may require:</p>
+            <ul className="list-disc list-inside mt-2 space-y-1">
+              <li>CORS proxy server for browser requests</li>
+              <li>Valid API subscription and active key</li>
+              <li>Backend server implementation for secure API calls</li>
+            </ul>
+          </div>
+        );
+      } finally {
+        setLoading(false);
+      }
     };
 
-    // Simulate API call
-    setTimeout(() => {
-      try {
-        const data = generateMockProperties();
-        setProperties(data);
-        setLoading(false);
-      } catch (err) {
-        setError('Failed to load properties');
-        setLoading(false);
-      }
-    }, 1000);
+    loadProperties();
   }, []);
+
+  // Retry API connection
+  const retryAPIConnection = () => {
+    window.location.reload();
+  };
 
   const totalPages = Math.ceil(properties.length / PROPERTIES_PER_PAGE);
   const startIndex = (currentPage - 1) * PROPERTIES_PER_PAGE;
@@ -108,13 +237,9 @@ const NashvilleRealEstate = () => {
   };
 
   const PropertyCard = ({ property }) => {
-    const isPropertyOfInterest = propertiesOfInterest.some(addr => 
-      property.address.toLowerCase().includes(addr.toLowerCase())
-    );
-
     return (
       <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]">
-        {isPropertyOfInterest && (
+        {property.isInterest && (
           <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-black px-3 py-1 flex items-center justify-center">
             <Star className="w-4 h-4 mr-1 fill-current" />
             <span className="text-xs font-semibold">Property of Interest</span>
@@ -125,10 +250,18 @@ const NashvilleRealEstate = () => {
             src={property.image} 
             alt={property.address}
             className="w-full h-48 object-cover"
+            onError={(e) => {
+              e.target.src = `https://picsum.photos/400/300?random=${Math.random()}`;
+            }}
           />
           <div className="absolute top-3 left-3 bg-black/70 text-white px-3 py-1 rounded-full">
             <span className="text-sm font-semibold">{formatPrice(property.price)}</span>
           </div>
+          {property.listingStatus && (
+            <div className="absolute top-3 right-3 bg-green-500 text-white px-2 py-1 rounded text-xs">
+              {property.listingStatus}
+            </div>
+          )}
         </div>
         
         <div className="p-4">
@@ -149,7 +282,7 @@ const NashvilleRealEstate = () => {
             </div>
             <div className="flex items-center gap-1">
               <Square className="w-3 h-3" />
-              <span>{property.sqft.toLocaleString()} sqft</span>
+              <span>{property.sqft?.toLocaleString()} sqft</span>
             </div>
           </div>
           
@@ -200,6 +333,9 @@ const NashvilleRealEstate = () => {
               src={property.image} 
               alt={property.address}
               className="w-full h-64 object-cover rounded-xl mb-6"
+              onError={(e) => {
+                e.target.src = `https://picsum.photos/600/400?random=${Math.random()}`;
+              }}
             />
             
             <div className="space-y-4">
@@ -224,10 +360,33 @@ const NashvilleRealEstate = () => {
                 </div>
                 <div className="text-center">
                   <Square className="w-6 h-6 mx-auto mb-1 text-gray-600" />
-                  <p className="text-lg font-semibold">{property.sqft.toLocaleString()}</p>
+                  <p className="text-lg font-semibold">{property.sqft?.toLocaleString()}</p>
                   <p className="text-sm text-gray-600">Square Feet</p>
                 </div>
               </div>
+              
+              {(property.yearBuilt || property.lotSize || property.propertyType) && (
+                <div className="grid grid-cols-3 gap-4 py-4 border-b">
+                  {property.yearBuilt && (
+                    <div>
+                      <p className="text-sm text-gray-600">Year Built</p>
+                      <p className="font-semibold">{property.yearBuilt}</p>
+                    </div>
+                  )}
+                  {property.lotSize && (
+                    <div>
+                      <p className="text-sm text-gray-600">Lot Size</p>
+                      <p className="font-semibold">{property.lotSize}</p>
+                    </div>
+                  )}
+                  {property.propertyType && (
+                    <div>
+                      <p className="text-sm text-gray-600">Type</p>
+                      <p className="font-semibold">{property.propertyType}</p>
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div>
                 <h4 className="font-semibold mb-2">Description</h4>
@@ -242,7 +401,7 @@ const NashvilleRealEstate = () => {
                   className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  View on Zillow
+                  View Full Details on Zillow
                 </a>
               </div>
             </div>
@@ -257,18 +416,8 @@ const NashvilleRealEstate = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading properties...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center text-red-600">
-          <p className="text-xl mb-2">Error</p>
-          <p>{error}</p>
+          <p className="text-gray-600 font-medium">{apiStatus}</p>
+          <p className="text-sm text-gray-500 mt-2">Loading Nashville area properties...</p>
         </div>
       </div>
     );
@@ -281,7 +430,7 @@ const NashvilleRealEstate = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="py-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg">
                 BV
               </div>
               <div>
@@ -297,12 +446,36 @@ const NashvilleRealEstate = () => {
         </div>
       </header>
 
+      {/* API Status Bar */}
+      {error && (
+        <div className="bg-yellow-50 border-b border-yellow-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 text-yellow-800">{error}</div>
+              <button
+                onClick={retryAPIConnection}
+                className="flex items-center gap-1 px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors text-sm"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stats Bar */}
       <div className="bg-blue-600 text-white py-3">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between text-sm">
-            <span>Showing {startIndex + 1}-{Math.min(endIndex, properties.length)} of {properties.length} properties</span>
-            <span>Sorted by: Price (Low to High)</span>
+            <span>
+              Showing {startIndex + 1}-{Math.min(endIndex, properties.length)} of {properties.length} properties 
+              ({propertiesOfInterest.filter(addr => 
+                currentProperties.some(p => p.address.toLowerCase().includes(addr.toLowerCase()))
+              ).length} marked as interest)
+            </span>
+            <span>Price Range: $2M - $5M | Sorted: Low to High</span>
           </div>
         </div>
       </div>
@@ -317,37 +490,54 @@ const NashvilleRealEstate = () => {
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-center gap-2">
-          <button
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            className="p-2 rounded-lg bg-white shadow hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          
-          {[...Array(totalPages)].map((_, index) => (
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2">
             <button
-              key={index}
-              onClick={() => setCurrentPage(index + 1)}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                currentPage === index + 1
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white shadow hover:shadow-md'
-              }`}
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg bg-white shadow hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {index + 1}
+              <ChevronLeft className="w-5 h-5" />
             </button>
-          ))}
-          
-          <button
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
-            className="p-2 rounded-lg bg-white shadow hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
+            
+            <div className="flex gap-1">
+              {[...Array(Math.min(totalPages, 5))].map((_, index) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = index + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = index + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + index;
+                } else {
+                  pageNum = currentPage - 2 + index;
+                }
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 py-1 rounded-lg transition-all ${
+                      currentPage === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white shadow hover:shadow-md'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-lg bg-white shadow hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        )}
       </main>
 
       {/* Footer */}
