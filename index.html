@@ -9,15 +9,22 @@ const NashvilleRealEstate = () => {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [apiStatus, setApiStatus] = useState('Connecting to Zillow API...');
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
   
   const PROPERTIES_PER_PAGE = 75;
   
-  // API Configuration
+  // API Configuration - Updated to use backend server
   const API_CONFIG = {
-    endpoint: 'https://zillow-com1.p.rapidapi.com/marketData',
+    // ⚠️ IMPORTANT: Update this URL for production deployment
+    // Development: http://localhost:3001
+    // Production: https://your-backend-url.com
+    backendUrl: 'http://localhost:3001',
+    // Fallback to direct API if you want to test (will be blocked by CORS)
+    directEndpoint: 'https://zillow-com1.p.rapidapi.com/marketData',
     headers: {
       'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
-      'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
+      'x-rapidapi-key': '37b5cffffamsh6c4ba5550a4883ep196c6fjsn2dc297e77753'
     }
   };
   
@@ -45,66 +52,91 @@ const NashvilleRealEstate = () => {
     '460 Tinnan Ave, Franklin, TN 37067'
   ];
 
-  // Fetch properties from Zillow API
+  // Fetch properties from Zillow API via backend server
   const fetchPropertiesFromAPI = async () => {
-    const locations = [
-      { city: 'Nashville', state: 'TN', resourceId: '32810' },
-      { city: 'Brentwood', state: 'TN', resourceId: '10221' },
-      { city: 'Franklin', state: 'TN', resourceId: '26140' },
-      { city: 'College Grove', state: 'TN', resourceId: '32847' }
-    ];
-
     const allProperties = [];
     
-    for (const location of locations) {
+    try {
+      setApiStatus('Connecting to property database...');
+      
+      // First, try to connect to backend server
+      let useBackend = true;
+      let response;
+      
       try {
-        setApiStatus(`Fetching properties from ${location.city}, ${location.state}...`);
+        // Attempt to connect to backend server
+        response = await fetch(`${API_CONFIG.backendUrl}/api/properties/all`);
+        console.log('Backend server response:', response.status);
         
-        // Construct API URL with parameters
-        const params = new URLSearchParams({
-          resourceId: location.resourceId,
-          beds: '0',
-          propertyTypes: 'house',
-          minPrice: '2000000',
-          maxPrice: '5000000',
-          sort: 'price'
-        });
-
-        const response = await fetch(`${API_CONFIG.endpoint}?${params}`, {
+        if (!response.ok && response.status === 0) {
+          // Backend not available, try direct API
+          throw new Error('Backend server not running');
+        }
+      } catch (backendError) {
+        console.log('Backend not available, attempting direct API call...');
+        useBackend = false;
+        
+        // Try direct API call (will likely fail due to CORS)
+        const url = 'https://zillow-com1.p.rapidapi.com/marketData?resourceId=32810&beds=0&propertyTypes=house';
+        
+        response = await fetch(url, {
           method: 'GET',
           headers: API_CONFIG.headers
         });
+      }
 
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.status} ${response.statusText}`);
-        }
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`API Error: ${response.status}`);
+      }
 
-        const data = await response.json();
-        
-        if (data && data.results) {
-          const formattedProperties = data.results.map((prop, index) => ({
-            id: `${location.city}-${index}`,
-            address: `${prop.address || ''}, ${location.city}, ${location.state} ${prop.zipcode || ''}`.trim(),
-            price: prop.price || prop.zestimate || 2500000,
-            beds: prop.bedrooms || 4,
-            baths: prop.bathrooms || 3,
-            sqft: prop.livingArea || 4000,
-            image: prop.imgSrc || `https://picsum.photos/400/300?random=${index}`,
-            zillowUrl: prop.detailUrl || `https://www.zillow.com/homedetails/${prop.zpid}`,
+      const data = await response.json();
+      console.log('API Response Data:', data);
+      
+      // Handle different possible response structures
+      const results = data.results || data.data || data.listings || data;
+      
+      if (Array.isArray(results)) {
+        const formattedProperties = results
+          .filter(prop => {
+            // Filter by price range
+            const price = prop.price || prop.zestimate || prop.unformattedPrice;
+            return !price || (price >= 2000000 && price <= 5000000);
+          })
+          .map((prop, index) => ({
+            id: `zillow-${index}`,
+            address: prop.address || prop.streetAddress || `${prop.street || ''} ${prop.city || 'Nashville'}, ${prop.state || 'TN'} ${prop.zipcode || ''}`.trim(),
+            price: prop.price || prop.zestimate || prop.unformattedPrice || 2500000,
+            beds: prop.bedrooms || prop.beds || 4,
+            baths: prop.bathrooms || prop.baths || 3,
+            sqft: prop.livingArea || prop.sqft || prop.area || 4000,
+            image: prop.imgSrc || prop.image || prop.photoUrl || `https://picsum.photos/400/300?random=${index}`,
+            zillowUrl: prop.detailUrl || prop.url || `https://www.zillow.com/homedetails/${prop.zpid || index}`,
             isInterest: false,
-            description: prop.description || 'Luxury property in prime Nashville area location',
+            description: prop.description || 'Luxury property in prime Nashville area',
             zpid: prop.zpid,
-            propertyType: prop.homeType || 'Single Family',
+            propertyType: prop.homeType || prop.propertyType || 'Single Family',
             yearBuilt: prop.yearBuilt,
-            lotSize: prop.lotAreaValue,
-            listingStatus: prop.homeStatus
+            lotSize: prop.lotAreaValue || prop.lotSize,
+            listingStatus: prop.homeStatus || prop.status || 'For Sale'
           }));
-          
-          allProperties.push(...formattedProperties);
-        }
-      } catch (err) {
-        console.error(`Error fetching ${location.city} properties:`, err);
-        // Continue with other locations even if one fails
+        
+        allProperties.push(...formattedProperties);
+        setApiStatus(`Successfully loaded ${formattedProperties.length} properties ${useBackend ? 'from server' : 'from API'}`);
+      } else {
+        console.log('Non-array results structure:', results);
+        setApiStatus('API returned unexpected data structure');
+      }
+      
+    } catch (err) {
+      console.error('API Connection Error:', err);
+      setApiStatus(`Connection Error: ${err.message}`);
+      
+      // Check if it's a CORS error
+      if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
+        console.log('CORS error detected - backend server required');
+        setApiStatus('Backend server required - see instructions below');
       }
     }
 
@@ -167,12 +199,16 @@ const NashvilleRealEstate = () => {
     const loadProperties = async () => {
       setLoading(true);
       setError(null);
+      let debugLog = 'API Connection Debug Log:\n';
+      debugLog += `Timestamp: ${new Date().toISOString()}\n`;
+      debugLog += `API Key: ${API_CONFIG.headers['x-rapidapi-key'].substring(0, 10)}...${API_CONFIG.headers['x-rapidapi-key'].substring(-4)}\n\n`;
       
       try {
         // Try to fetch from API first
         const apiProperties = await fetchPropertiesFromAPI();
         
         if (apiProperties.length > 0) {
+          debugLog += `✅ Success: Loaded ${apiProperties.length} properties from Zillow\n`;
           setApiStatus(`Successfully loaded ${apiProperties.length} properties from Zillow`);
           
           // Mark properties of interest
@@ -188,11 +224,21 @@ const NashvilleRealEstate = () => {
           setProperties(sortedProperties);
         } else {
           // If API returns no data, use fallback
+          debugLog += '⚠️ Warning: API returned no properties\n';
           throw new Error('No properties returned from API');
         }
       } catch (err) {
         console.error('API Error:', err);
-        setApiStatus('Using demo data (API connection issue - check CORS/network)');
+        debugLog += `❌ Error: ${err.message}\n`;
+        debugLog += '\nPossible issues:\n';
+        debugLog += '1. CORS blocking (most likely in browser environment)\n';
+        debugLog += '2. Invalid or expired API key\n';
+        debugLog += '3. API rate limit exceeded\n';
+        debugLog += '4. Network connectivity issues\n\n';
+        debugLog += 'Solution: Deploy with backend server to bypass CORS\n';
+        
+        setApiStatus('Using demo data (API blocked by CORS)');
+        setDebugInfo(debugLog);
         
         // Use fallback data
         const fallbackData = generateFallbackData();
@@ -200,13 +246,21 @@ const NashvilleRealEstate = () => {
         
         setError(
           <div className="text-sm">
-            <p className="font-semibold mb-1">API Connection Notice:</p>
-            <p>Currently displaying demo data. The Zillow API may require:</p>
-            <ul className="list-disc list-inside mt-2 space-y-1">
-              <li>CORS proxy server for browser requests</li>
-              <li>Valid API subscription and active key</li>
-              <li>Backend server implementation for secure API calls</li>
-            </ul>
+            <p className="font-semibold mb-1">Backend Server Required</p>
+            <p className="mb-2">To fetch live Zillow data, you need to run the backend server:</p>
+            <ol className="list-decimal list-inside space-y-1 text-xs">
+              <li>Install Node.js if not already installed</li>
+              <li>Create a new folder and save the server.js file</li>
+              <li>Run: <code className="bg-gray-200 px-1 rounded">npm install express cors axios</code></li>
+              <li>Run: <code className="bg-gray-200 px-1 rounded">node server.js</code></li>
+              <li>The server will start on port 3001</li>
+            </ol>
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              className="mt-2 text-blue-600 hover:text-blue-700 underline text-xs"
+            >
+              {showDebug ? 'Hide' : 'Show'} Debug Info
+            </button>
           </div>
         );
       } finally {
@@ -461,6 +515,11 @@ const NashvilleRealEstate = () => {
                 Retry
               </button>
             </div>
+            {showDebug && debugInfo && (
+              <div className="mt-3 p-3 bg-gray-900 text-green-400 rounded text-xs font-mono whitespace-pre-wrap">
+                {debugInfo}
+              </div>
+            )}
           </div>
         </div>
       )}
