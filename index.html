@@ -998,6 +998,55 @@
             
             // Call YOUR Netlify function (not CORS proxy!)
             const response = await fetch(`/.netlify/functions/zillow?location=${encodeURIComponent(location)}&page=1`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${location}: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.props && data.props.length > 0) {
+                allProperties = allProperties.concat(data.props);
+                console.log(`Found ${data.props.length} properties in ${location}`);
+                
+                // Try page 2
+                if (data.props.length >= 40) {
+                    apiCallCount++;
+                    const response2 = await fetch(`/.netlify/functions/zillow?location=${encodeURIComponent(location)}&page=2`);
+                    if (response2.ok) {
+                        const data2 = await response2.json();
+                        if (data2.props) {
+                            allProperties = allProperties.concat(data2.props);
+                            console.log(`Found ${data2.props.length} more properties (page 2)`);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Remove duplicates
+        const uniqueProperties = Array.from(
+            new Map(allProperties.map(p => [p.zpid, p])).values()
+        );
+        
+        console.log(`Total properties found: ${uniqueProperties.length}`);
+        
+        if (uniqueProperties.length > 0) {
+            processZillowData(uniqueProperties);
+            document.getElementById('dataSource').textContent = 'Zillow API';
+            updateStatus('active', '✅ Real Data Loaded!', `${uniqueProperties.length} real properties with photos`);
+            
+            document.getElementById('responseTime').textContent = `${Date.now() - startTime}ms`;
+            document.getElementById('apiCalls').textContent = apiCallCount;
+        } else {
+            throw new Error('No properties returned from API');
+        }
+        
+    } catch (error) {
+        console.error('API Error:', error);
+        updateStatus('error', 'Loading Demo Data', 'API unavailable');
+        loadDemoData();
+    }
+}
             
             if (!response.ok) {
                 throw new Error(`Failed to fetch ${location}: ${response.status}`);
