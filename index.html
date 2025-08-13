@@ -1113,59 +1113,73 @@
     }
 }
         
-        // Process Zillow Data
+  // Process Zillow Data
         function processZillowData(zillowProps) {
             properties = [];
             
-            // First add featured properties
-            FEATURED_PROPERTIES.forEach((fp, index) => {
-                properties.push({
-                    zpid: `featured-${index}`,
-                    address: fp.address,
-                    city: fp.city,
-                    state: 'TN',
-                    zipcode: fp.zip,
-                    price: 2500000 + (index * 150000),
-                    bedrooms: 4,
-                    bathrooms: 3,
-                    sqft: 4500,
-                    yearBuilt: 2020,
-                    propertyType: 'Single Family',
-                    imageUrl: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80',
-                    isFeatured: true,
-                    isNew: index < 3,
-                    hasOpenHouse: fp.openHouse || false,
-                    category: fp.category,
-                    daysOnZillow: Math.floor(Math.random() * 30)
-                });
-            });
-            
-            // Add Zillow properties
+            // Process each Zillow property
             zillowProps.forEach(prop => {
                 properties.push({
                     zpid: prop.zpid || `zillow-${Math.random()}`,
                     address: prop.address || prop.streetAddress || 'Unknown Address',
                     city: prop.city || 'Franklin',
                     state: prop.state || 'TN',
-                    zipcode: prop.zipcode || '37067',
-                    price: prop.price || prop.unformattedPrice || 2500000,
-                    bedrooms: prop.beds || 4,
-                    bathrooms: prop.baths || 3,
-                    sqft: prop.area || prop.livingArea || 4000,
+                    zipcode: prop.zipcode || prop.zip || '37067',
+                    price: parseInt(prop.price) || parseInt(prop.unformattedPrice) || 2500000,
+                    bedrooms: prop.beds || prop.bedrooms || 4,
+                    bathrooms: prop.baths || prop.bathrooms || 3,
+                    sqft: prop.area || prop.livingArea || prop.sqft || 4000,
                     yearBuilt: prop.yearBuilt || 2018,
-                    propertyType: prop.propertyType || 'Single Family',
-                    imageUrl: prop.imgSrc || prop.image || 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
-                    isFeatured: false,
+                    propertyType: prop.propertyType || prop.homeType || 'Single Family',
+                    imageUrl: prop.imgSrc || prop.image || prop.relaxedImgSrc || 
+                              'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
+                    isFeatured: checkIfFeatured(prop.address || prop.streetAddress || ''),
                     isNew: prop.isNew || false,
                     hasOpenHouse: prop.hasOpenHouse || false,
+                    category: null,
                     daysOnZillow: prop.daysOnZillow || 0
                 });
+            });
+            
+            // Add featured properties that weren't found in Zillow results
+            FEATURED_PROPERTIES.forEach((fp, index) => {
+                const found = properties.some(p => 
+                    p.address.toLowerCase().includes(fp.address.toLowerCase().split(' ')[0])
+                );
+                if (!found) {
+                    properties.unshift({
+                        zpid: `featured-${index}`,
+                        address: fp.address,
+                        city: fp.city,
+                        state: 'TN',
+                        zipcode: fp.zip,
+                        price: 2500000 + (index * 150000),
+                        bedrooms: 4,
+                        bathrooms: 3,
+                        sqft: 4500,
+                        yearBuilt: 2020,
+                        propertyType: 'Single Family',
+                        imageUrl: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80',
+                        isFeatured: true,
+                        isNew: index < 3,
+                        hasOpenHouse: fp.openHouse || false,
+                        category: fp.category,
+                        daysOnZillow: 10
+                    });
+                }
             });
             
             filteredProperties = [...properties];
             renderProperties();
             updateStats();
             updateLastUpdate();
+        }
+        
+        function checkIfFeatured(address) {
+            return FEATURED_PROPERTIES.some(fp => {
+                const fpStreet = fp.address.toLowerCase().split(' ').slice(0, 2).join(' ');
+                return address.toLowerCase().includes(fpStreet);
+            });
         }
 
         // Render Properties
