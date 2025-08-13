@@ -989,11 +989,9 @@
             apiCallCount++;
             
             // List of CORS proxies to try
-            const corsProxies = [
-                'https://corsproxy.io/?',
-                'https://api.allorigins.win/raw?url=',
-                'https://cors-anywhere.herokuapp.com/'
-            ];
+     const corsProxies = [
+    'https://corsproxy.io/?'
+];
             
             let dataLoaded = false;
             
@@ -1026,7 +1024,7 @@
                             method: 'GET',
                             headers: {
                                 'Accept': 'application/json',
-                                'x-rapidapi-host': 'zillow-com1.p.rapidapi.com',
+                                'x-rapidapi-host': '',
                                 'x-rapidapi-key': '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053'
                             }
                         });
