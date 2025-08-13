@@ -1002,7 +1002,53 @@ const corsProxies = [
                 
                 try {
                     // Test with a simple API call first
-                    const testUrl = `${proxy}${encodeURIComponent('https://zillow-com1.p.rapidapi.com/propertyDetails?zpid=2080998890')}`;
+                    async function loadWithProxy() {
+    console.log('Loading REAL data from Zillow API...');
+    updateStatus('loading', 'Connecting to Zillow API', 'Fetching real properties...');
+    
+    const startTime = Date.now();
+    let allProperties = [];
+    
+    try {
+        // Fetch from your Netlify function
+        const locations = ['Franklin, TN', 'Brentwood, TN', 'College Grove, TN'];
+        
+        for (const location of locations) {
+            console.log(`Fetching ${location}...`);
+            
+            // Get page 1
+            const response = await fetch(`/api/zillow?location=${encodeURIComponent(location)}&page=1`);
+            const data = await response.json();
+            
+            if (data.props) {
+                allProperties = allProperties.concat(data.props);
+                console.log(`Found ${data.props.length} properties in ${location}`);
+                
+                // Get page 2 if available
+                if (data.props.length >= 40) {
+                    const response2 = await fetch(`/api/zillow?location=${encodeURIComponent(location)}&page=2`);
+                    const data2 = await response2.json();
+                    if (data2.props) {
+                        allProperties = allProperties.concat(data2.props);
+                        console.log(`Found ${data2.props.length} more properties (page 2)`);
+                    }
+                }
+            }
+        }
+        
+        console.log(`Total properties found: ${allProperties.length}`);
+        
+        if (allProperties.length > 0) {
+            processZillowData(allProperties);
+            document.getElementById('dataSource').textContent = 'Zillow API';
+            updateStatus('active', 'Real Data Loaded!', `${allProperties.length} real properties from Zillow`);
+        }
+        
+    } catch (error) {
+        console.error('API Error:', error);
+        updateStatus('error', 'API Error', error.message);
+    }
+}
                     
                     const response = await fetch(testUrl, {
                         method: 'GET',
