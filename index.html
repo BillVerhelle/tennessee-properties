@@ -982,16 +982,92 @@
 
         // Load with CORS Proxy
         async function loadWithProxy() {
+    console.log('Loading REAL data from Zillow API via Netlify...');
+    updateStatus('loading', 'Connecting to Zillow API', 'Fetching real properties...');
+    
+    const startTime = Date.now();
+    let allProperties = [];
+    apiCallCount = 0;
+    
+    try {
+        const locations = ['Franklin, TN', 'Brentwood, TN', 'College Grove, TN'];
+        
+        for (const location of locations) {
+            console.log(`Fetching ${location}...`);
+            apiCallCount++;
+            
+            // Call YOUR Netlify function (not CORS proxy!)
+            const response = await fetch(`/.netlify/functions/zillow?location=${encodeURIComponent(location)}&page=1`);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${location}: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.props && data.props.length > 0) {
+                allProperties = allProperties.concat(data.props);
+                console.log(`Found ${data.props.length} properties in ${location}`);
+                
+                // Try page 2
+                if (data.props.length >= 40) {
+                    apiCallCount++;
+                    const response2 = await fetch(`/.netlify/functions/zillow?location=${encodeURIComponent(location)}&page=2`);
+                    if (response2.ok) {
+                        const data2 = await response2.json();
+                        if (data2.props) {
+                            allProperties = allProperties.concat(data2.props);
+                            console.log(`Found ${data2.props.length} more properties (page 2)`);
+                        }
+                    }
+                }
+                
+                // Try page 3
+                if (data.props.length >= 40) {
+                    apiCallCount++;
+                    const response3 = await fetch(`/.netlify/functions/zillow?location=${encodeURIComponent(location)}&page=3`);
+                    if (response3.ok) {
+                        const data3 = await response3.json();
+                        if (data3.props) {
+                            allProperties = allProperties.concat(data3.props);
+                            console.log(`Found ${data3.props.length} more properties (page 3)`);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Remove duplicates
+        const uniqueProperties = Array.from(
+            new Map(allProperties.map(p => [p.zpid, p])).values()
+        );
+        
+        console.log(`Total properties found: ${uniqueProperties.length}`);
+        
+        if (uniqueProperties.length > 0) {
+            processZillowData(uniqueProperties);
+            document.getElementById('dataSource').textContent = 'Zillow API';
+            updateStatus('active', '✅ Real Data Loaded!', `${uniqueProperties.length} real properties with photos`);
+            
+            // Remove the error alert completely
+            document.getElementById('responseTime').textContent = `${Date.now() - startTime}ms`;
+            document.getElementById('apiCalls').textContent = apiCallCount;
+        } else {
+            throw new Error('No properties returned from API');
+        }
+        
+    } catch (error) {
+        console.error('API Error:', error);
+        updateStatus('error', 'Loading Demo Data', 'API unavailable');
+        // Don't show alert, just load demo data
+        loadDemoData();
+    }
+}
             console.log('Attempting to load live data via CORS proxy...');
             updateStatus('loading', 'Connecting to Zillow API', 'Using CORS proxy for API access...');
             
             const startTime = Date.now();
             apiCallCount++;
-            
-   // List of CORS proxies to try
-const corsProxies = [
-    'https://corsproxy.io/?'
-];
             
             let dataLoaded = false;
             
