@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bill & Cyndee Verhelle's Preferred Properties</title>
+    <title>Bill & Cyndee Verhelle's Properties - Williamson County, TN</title>
     <style>
         * {
             margin: 0;
@@ -632,7 +632,7 @@
                     </div>
                     <div class="header-text">
                         <h1>Bill & Cyndee Verhelle's Preferred Properties</h1>
-                        <div class="subheading">Tennessee Luxury Real Estate Portfolio</div>
+                        <div class="subheading">Williamson County, TN Luxury Real Estate</div>
                     </div>
                     <div class="stats-container">
                         <div class="stat">
@@ -657,14 +657,14 @@
         <section class="controls-section">
             <div class="controls-card">
                 <div class="search-header">
-                    <h2 class="search-title">Brentwood, Franklin, and College Grove Properties</h2>
+                    <h2 class="search-title">Williamson County, TN Properties</h2>
                     <span style="color: var(--apple-gray); font-size: 14px;">Last updated: <span id="lastUpdate">Never</span></span>
                 </div>
                 
                 <div class="filter-tags">
                     <span class="filter-tag">
                         <span class="filter-tag-icon">📍</span>
-                        Brentwood, Franklin, College Grove
+                        Williamson County, TN
                     </span>
                     <span class="filter-tag">
                         <span class="filter-tag-icon">💰</span>
@@ -749,7 +749,7 @@
             <div class="footer-content">
                 <div class="footer-logo"></div>
                 <p>© 2024 Bill & Cyndee Verhelle. All Rights Reserved.</p>
-                <p style="margin-top: 8px; font-size: 12px; opacity: 0.7;">Tennessee Luxury Real Estate</p>
+                <p style="margin-top: 8px; font-size: 12px; opacity: 0.7;">Williamson County, TN Luxury Real Estate</p>
             </div>
         </div>
     </footer>
@@ -760,21 +760,25 @@
             'The Grove': {
                 keywords: ['Grove', 'Pelican', 'Native Pony', 'Heirloom', 'Passiflora'],
                 city: 'College Grove',
+                zips: ['37046'],
                 category: 'The Grove'
             },
             'Troubadour': {
                 keywords: ['Troubadour', 'Lanceleaf', 'Golf & Field Club'],
                 city: 'College Grove',
+                zips: ['37046'],
                 category: 'Troubadour Golf & Field Club'
             },
-            'Avalon': {
+            'Avalon/Cool Springs': {
                 keywords: ['Avalon', 'Lady of the Lake', 'Cool Springs'],
                 cities: ['Franklin', 'Brentwood'],
+                zips: ['37067', '37046', '37027'],
                 category: 'Avalon/Cool Springs'
             },
             'Westhaven': {
                 keywords: ['Westhaven', 'Cheltenham', 'Millstone', 'Thornbury'],
                 city: 'Franklin',
+                zips: ['37046'],
                 category: 'Westhaven'
             },
             'Downtown Franklin': {
@@ -782,11 +786,12 @@
                           'Fair St', 'Fair Street', 'Church St', 'Church Street', 
                           'Columbia Ave', 'Columbia Avenue'],
                 city: 'Franklin',
+                zips: ['37064'],
                 category: 'Downtown Franklin'
             }
         };
 
-        // Price and age requirements
+        // Price and age requirements for featured properties
         const FEATURED_CRITERIA = {
             minPrice: 2000000,
             maxPrice: 5000000,
@@ -806,97 +811,98 @@
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
             console.log('🏠 Tennessee Properties Platform Initialized');
+            console.log('📍 Searching: All of Williamson County, TN');
+            console.log('🏘️ Featured Communities: The Grove, Troubadour, Avalon, Westhaven, Downtown Franklin');
+            console.log('💰 Criteria: $2M-$5M, Built after 2014');
             loadDemoData();
         });
 
         // Load Live Data from Zillow API
         async function loadLiveData() {
             console.log('Loading REAL data from Zillow API...');
-            updateStatus('loading', 'Connecting to Zillow API', 'Searching for properties in Tennessee...');
+            updateStatus('loading', 'Connecting to Zillow API', 'Searching all of Williamson County, TN...');
             
             const startTime = Date.now();
             apiCallCount = 0;
             
-            // Cities to search
-            const locations = [
-                { city: 'Franklin', state: 'TN' },
-                { city: 'Brentwood', state: 'TN' },
-                { city: 'College Grove', state: 'TN' }
-            ];
+            // Search for ALL of Williamson County, TN
+            const searchQuery = 'Williamson County, TN';
             
             let allProperties = [];
             
-            for (const location of locations) {
-                try {
-                    console.log(`Searching ${location.city}, ${location.state}...`);
-                    
-                    // Using propertyExtendedSearch endpoint for actual property listings
-                    const url = `https://${API_HOST}/propertyExtendedSearch?location=${encodeURIComponent(location.city + ', ' + location.state)}&home_type=Houses&minPrice=2000000&maxPrice=5000000`;
-                    
-                    // Try with CORS proxy first
-                    const proxies = [
-                        'https://corsproxy.io/?',
-                        'https://api.allorigins.win/raw?url=',
-                        ''  // Try direct as last resort
-                    ];
-                    
-                    let success = false;
-                    for (const proxy of proxies) {
-                        try {
-                            const response = await fetch(proxy + (proxy ? encodeURIComponent(url) : url), {
-                                method: 'GET',
-                                headers: {
-                                    'x-rapidapi-key': API_KEY,
-                                    'x-rapidapi-host': API_HOST
-                                }
-                            });
-                            
-                            if (response.ok) {
-                                const data = await response.json();
-                                apiCallCount++;
-                                
-                                console.log(`Response from ${location.city}:`, data);
-                                
-                                // Handle the response based on the actual structure
-                                if (data.props) {
-                                    allProperties = allProperties.concat(data.props);
-                                    success = true;
-                                    break;
-                                } else if (data.results) {
-                                    allProperties = allProperties.concat(data.results);
-                                    success = true;
-                                    break;
-                                } else if (Array.isArray(data)) {
-                                    allProperties = allProperties.concat(data);
-                                    success = true;
-                                    break;
-                                }
+            try {
+                console.log(`Searching ${searchQuery}...`);
+                
+                // Using propertyExtendedSearch endpoint for actual property listings
+                const url = `https://${API_HOST}/propertyExtendedSearch?location=${encodeURIComponent(searchQuery)}&home_type=Houses&minPrice=2000000&maxPrice=5000000`;
+                
+                // Try with CORS proxy first
+                const proxies = [
+                    'https://corsproxy.io/?',
+                    'https://api.allorigins.win/raw?url=',
+                    ''  // Try direct as last resort
+                ];
+                
+                let success = false;
+                for (const proxy of proxies) {
+                    try {
+                        const response = await fetch(proxy + (proxy ? encodeURIComponent(url) : url), {
+                            method: 'GET',
+                            headers: {
+                                'x-rapidapi-key': API_KEY,
+                                'x-rapidapi-host': API_HOST
                             }
-                        } catch (err) {
-                            console.log(`Proxy ${proxy} failed:`, err);
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            apiCallCount++;
+                            
+                            console.log(`Response from ${searchQuery}:`, data);
+                            
+                            // Handle the response based on the actual structure
+                            if (data.props) {
+                                allProperties = allProperties.concat(data.props);
+                                success = true;
+                                break;
+                            } else if (data.results) {
+                                allProperties = allProperties.concat(data.results);
+                                success = true;
+                                break;
+                            } else if (Array.isArray(data)) {
+                                allProperties = allProperties.concat(data);
+                                success = true;
+                                break;
+                            }
                         }
+                    } catch (err) {
+                        console.log(`Proxy ${proxy} failed:`, err);
                     }
-                    
-                    if (!success) {
-                        console.log(`Could not fetch data for ${location.city}`);
-                    }
-                    
-                } catch (error) {
-                    console.error(`Error fetching ${location.city}:`, error);
                 }
+                
+                if (!success) {
+                    console.log(`Could not fetch data for ${searchQuery}, trying alternative method...`);
+                    // Try alternative search method
+                    loadAlternativeSearch();
+                    return;
+                }
+                
+            } catch (error) {
+                console.error(`Error fetching ${searchQuery}:`, error);
+                loadAlternativeSearch();
+                return;
             }
             
             document.getElementById('responseTime').textContent = `${Date.now() - startTime}ms`;
             document.getElementById('apiCalls').textContent = apiCallCount;
             
             if (allProperties.length > 0) {
-                console.log(`Found ${allProperties.length} properties total`);
+                console.log(`Found ${allProperties.length} properties in Williamson County`);
                 processZillowData(allProperties);
                 document.getElementById('dataSource').textContent = 'Zillow Live';
-                updateStatus('active', '✅ Live Data Loaded!', `${allProperties.length} real properties from Zillow`);
+                updateStatus('active', '✅ Live Data Loaded!', `${allProperties.length} properties from Williamson County`);
             } else {
                 console.log('No properties found, trying alternative search...');
-                // Try alternative search method
                 loadAlternativeSearch();
             }
         }
@@ -904,14 +910,26 @@
         // Alternative search method using different endpoint
         async function loadAlternativeSearch() {
             console.log('Trying alternative search method...');
-            updateStatus('loading', 'Alternative Search', 'Searching Tennessee properties...');
+            updateStatus('loading', 'Alternative Search', 'Searching Williamson County properties by zip code...');
             
             try {
-                // Try the search endpoint with Tennessee zip codes
-                const zipCodes = ['37067', '37069', '37046', '37027', '37064'];
+                // All zip codes in Williamson County, TN
+                const williamsonZipCodes = [
+                    '37046', // College Grove
+                    '37067', // Franklin
+                    '37064', // Franklin
+                    '37069', // Franklin
+                    '37027', // Brentwood
+                    '37024', // Brentwood
+                    '37062', // Fairview
+                    '37179', // Spring Hill
+                    '37135', // Nolensville
+                    '37187'  // Thompsons Station
+                ];
+                
                 let allProperties = [];
                 
-                for (const zip of zipCodes) {
+                for (const zip of williamsonZipCodes) {
                     const url = `https://${API_HOST}/propertyByZip?zip=${zip}`;
                     
                     try {
@@ -944,7 +962,7 @@
                 if (allProperties.length > 0) {
                     processZillowData(allProperties);
                     document.getElementById('dataSource').textContent = 'Zillow API';
-                    updateStatus('active', '✅ Properties Found!', `${allProperties.length} properties loaded`);
+                    updateStatus('active', '✅ Properties Found!', `${allProperties.length} properties in Williamson County`);
                 } else {
                     // If still no data, load demo
                     updateStatus('error', 'API Unavailable', 'Loading demo data instead...');
@@ -980,7 +998,7 @@
                 const imgSrc = prop.imgSrc || prop.image || prop.photoUrl || prop.relaxedImgSrc || '';
                 
                 // Check if it's a featured property
-                const featuredCheck = checkIfFeatured(address, city, yearBuilt, price);
+                const featuredCheck = checkIfFeatured(address, city, zip, yearBuilt, price);
                 // Fix the detail URL to ensure it's absolute
                 let detailUrl = prop.detailUrl || prop.url || '';
                 
@@ -1046,7 +1064,7 @@
         }
         
         // Check if property is in a featured community
-        function checkIfFeatured(address, city, yearBuilt, price) {
+        function checkIfFeatured(address, city, zip, yearBuilt, price) {
             // First check price and age criteria
             const currentYear = new Date().getFullYear();
             const propertyAge = yearBuilt ? currentYear - yearBuilt : 100;
@@ -1061,23 +1079,31 @@
             
             // Check if property is in a featured community
             const addressLower = address.toLowerCase();
-            const cityLower = city.toLowerCase();
+            const cityLower = city ? city.toLowerCase() : '';
+            const zipStr = String(zip);
             
             for (const [communityName, community] of Object.entries(FEATURED_COMMUNITIES)) {
-                // Check keywords
+                // Check keywords in address
                 const hasKeyword = community.keywords.some(keyword => 
                     addressLower.includes(keyword.toLowerCase())
                 );
                 
-                // Check city match
-                let cityMatch = false;
-                if (community.city) {
+                // Check zip code match
+                let zipMatch = false;
+                if (community.zips) {
+                    zipMatch = community.zips.includes(zipStr);
+                }
+                
+                // Check city match (optional since we're using zip codes)
+                let cityMatch = true; // Default to true since zip is more specific
+                if (community.city && cityLower) {
                     cityMatch = cityLower.includes(community.city.toLowerCase());
-                } else if (community.cities) {
+                } else if (community.cities && cityLower) {
                     cityMatch = community.cities.some(c => cityLower.includes(c.toLowerCase()));
                 }
                 
-                if (hasKeyword && cityMatch) {
+                // Property is featured if it has keyword AND (zip match OR city match)
+                if (hasKeyword && (zipMatch || cityMatch)) {
                     return {
                         isFeatured: true,
                         category: community.category
