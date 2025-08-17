@@ -672,11 +672,11 @@
                     </span>
                     <span class="filter-tag">
                         <span class="filter-tag-icon">🏠</span>
-                        Single Family Homes
+                        Built After 2014
                     </span>
                     <span class="filter-tag">
                         <span class="filter-tag-icon">⭐</span>
-                        20 Featured Properties
+                        <span id="featuredCount">Featured Communities</span>
                     </span>
                 </div>
                 
@@ -755,29 +755,43 @@
     </footer>
 
     <script>
-        // Configuration
-        const FEATURED_PROPERTIES = [
-            { address: '7045 Lanceleaf Dr', city: 'College Grove', zip: '37046', category: 'Troubadour Golf & Field Club' },
-            { address: '6004 Pelican Way', city: 'College Grove', zip: '37046', category: 'The Grove' },
-            { address: '6045 Native Pony Trl', city: 'College Grove', zip: '37046', category: 'The Grove' },
-            { address: '8500 Heirloom Blvd', city: 'College Grove', zip: '37046', category: 'The Grove' },
-            { address: '8135 Heirloom Blvd', city: 'College Grove', zip: '37046', category: 'The Grove' },
-            { address: '8524 Heirloom Blvd', city: 'College Grove', zip: '37046', category: 'The Grove' },
-            { address: '9052 Passiflora Ct', city: 'College Grove', zip: '37046', category: 'The Grove' },
-            { address: '391 The Lady Of The Lake Ln', city: 'Franklin', zip: '37067', category: 'Alalon' },
-            { address: '1005 Scramblers Knob', city: 'Franklin', zip: '37069', category: 'Franklin' },
-            { address: '1420 Amesbury Ln', city: 'Franklin', zip: '37069', category: 'Franklin' },
-            { address: '305 Lockhart Ct', city: 'Franklin', zip: '37069', category: 'Franklin' },
-            { address: '6128 Lookaway Cir LOT 208', city: 'Franklin', zip: '37067', category: 'Franklin' },
-            { address: '7116 Bonterra Dr', city: 'Franklin', zip: '37064', category: 'Franklin' },
-            { address: '1013 Buena Vista Dr', city: 'Franklin', zip: '37069', category: 'Franklin', openHouse: true },
-            { address: '5603 Winslet Dr', city: 'Franklin', zip: '37064', category: 'Franklin' },
-            { address: '460 Tinnan Ave', city: 'Franklin', zip: '37067', category: 'Cool Springs' },
-            { address: '9222 Lehigh Dr', city: 'Brentwood', zip: '37027', category: 'Brentwood' },
-            { address: '1807 Morgan Farms Way', city: 'Brentwood', zip: '37027', category: 'Brentwood' },
-            { address: '8100 Turning Point Dr LOT 14', city: 'Brentwood', zip: '37027', category: 'Brentwood' },
-            { address: '8103 Turning Point Dr LOT 12', city: 'Brentwood', zip: '37027', category: 'Brentwood' }
-        ];
+        // Configuration - Featured Communities and Areas
+        const FEATURED_COMMUNITIES = {
+            'The Grove': {
+                keywords: ['Grove', 'Pelican', 'Native Pony', 'Heirloom', 'Passiflora'],
+                city: 'College Grove',
+                category: 'The Grove'
+            },
+            'Troubadour': {
+                keywords: ['Troubadour', 'Lanceleaf', 'Golf & Field Club'],
+                city: 'College Grove',
+                category: 'Troubadour Golf & Field Club'
+            },
+            'Avalon': {
+                keywords: ['Avalon', 'Lady of the Lake', 'Cool Springs'],
+                cities: ['Franklin', 'Brentwood'],
+                category: 'Avalon/Cool Springs'
+            },
+            'Westhaven': {
+                keywords: ['Westhaven', 'Cheltenham', 'Millstone', 'Thornbury'],
+                city: 'Franklin',
+                category: 'Westhaven'
+            },
+            'Downtown Franklin': {
+                keywords: ['Main St', 'Main Street', 'Public Square', 'Downtown', 'Historic', 
+                          'Fair St', 'Fair Street', 'Church St', 'Church Street', 
+                          'Columbia Ave', 'Columbia Avenue'],
+                city: 'Franklin',
+                category: 'Downtown Franklin'
+            }
+        };
+
+        // Price and age requirements
+        const FEATURED_CRITERIA = {
+            minPrice: 2000000,
+            maxPrice: 5000000,
+            maxAge: 10  // Built after 2014
+        };
 
         // RapidAPI Configuration
         const API_KEY = '2fce36f1bamsh4969a56fe56ac45p180e3cjsn208af5507053';
@@ -962,7 +976,11 @@
                 const beds = prop.beds || prop.bedrooms || prop.bed || 4;
                 const baths = prop.baths || prop.bathrooms || prop.bath || 3;
                 const sqft = prop.area || prop.livingArea || prop.sqft || prop.livingAreaValue || 4000;
+                const yearBuilt = prop.yearBuilt || 2020;
                 const imgSrc = prop.imgSrc || prop.image || prop.photoUrl || prop.relaxedImgSrc || '';
+                
+                // Check if it's a featured property
+                const featuredCheck = checkIfFeatured(address, city, yearBuilt, price);
                 // Fix the detail URL to ensure it's absolute
                 let detailUrl = prop.detailUrl || prop.url || '';
                 
@@ -979,11 +997,6 @@
                     console.log(`Property ${index}: ${address}, URL: ${detailUrl}`);
                 }
                 
-                // Check if it's a featured property
-                const isFeatured = FEATURED_PROPERTIES.some(fp => 
-                    address.toLowerCase().includes(fp.address.toLowerCase().split(' ')[0])
-                );
-                
                 properties.push({
                     zpid: zpid,
                     address: address,
@@ -994,45 +1007,16 @@
                     bedrooms: beds,
                     bathrooms: baths,
                     sqft: sqft,
-                    yearBuilt: prop.yearBuilt || 2020,
+                    yearBuilt: yearBuilt,
                     propertyType: prop.propertyType || prop.homeType || 'Single Family',
                     imageUrl: imgSrc || `https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80`,
                     detailUrl: detailUrl,
-                    isFeatured: isFeatured,
+                    isFeatured: featuredCheck.isFeatured,
                     isNew: prop.isNew || index < 5,
                     hasOpenHouse: prop.hasOpenHouse || false,
+                    category: featuredCheck.category,
                     daysOnZillow: prop.daysOnZillow || prop.timeOnZillow || 15
                 });
-            });
-            
-            // Add featured properties that weren't in the results
-            FEATURED_PROPERTIES.forEach((fp, index) => {
-                const exists = properties.some(p => 
-                    p.address.includes(fp.address.split(' ')[0])
-                );
-                
-                if (!exists) {
-                    properties.unshift({
-                        zpid: `featured-${index}`,
-                        address: fp.address,
-                        city: fp.city,
-                        state: 'TN',
-                        zipcode: fp.zip,
-                        price: 2500000 + (index * 150000),
-                        bedrooms: 4,
-                        bathrooms: 3,
-                        sqft: 4500,
-                        yearBuilt: 2020,
-                        propertyType: 'Single Family',
-                        imageUrl: `https://images.unsplash.com/photo-160059654${2815 + index}-ffad4c1539a9?w=800&q=80`,
-                        detailUrl: `https://www.zillow.com/homes/${encodeURIComponent(fp.address + ' ' + fp.city + ' TN ' + fp.zip)}_rb/`,
-                        isFeatured: true,
-                        isNew: index < 3,
-                        hasOpenHouse: fp.openHouse || false,
-                        category: fp.category,
-                        daysOnZillow: 10
-                    });
-                }
             });
             
             // Sort: featured first, then by price
@@ -1041,6 +1025,10 @@
                 if (!a.isFeatured && b.isFeatured) return 1;
                 return a.price - b.price;
             });
+            
+            // Update featured count in filter tag
+            const featuredCount = properties.filter(p => p.isFeatured).length;
+            document.getElementById('featuredCount').innerHTML = `${featuredCount} Featured Properties`;
             
             filteredProperties = [...properties];
             renderProperties();
@@ -1055,6 +1043,49 @@
                 if (address.includes(city)) return city;
             }
             return 'Franklin';
+        }
+        
+        // Check if property is in a featured community
+        function checkIfFeatured(address, city, yearBuilt, price) {
+            // First check price and age criteria
+            const currentYear = new Date().getFullYear();
+            const propertyAge = yearBuilt ? currentYear - yearBuilt : 100;
+            
+            if (price < FEATURED_CRITERIA.minPrice || price > FEATURED_CRITERIA.maxPrice) {
+                return { isFeatured: false, category: null };
+            }
+            
+            if (propertyAge > FEATURED_CRITERIA.maxAge) {
+                return { isFeatured: false, category: null };
+            }
+            
+            // Check if property is in a featured community
+            const addressLower = address.toLowerCase();
+            const cityLower = city.toLowerCase();
+            
+            for (const [communityName, community] of Object.entries(FEATURED_COMMUNITIES)) {
+                // Check keywords
+                const hasKeyword = community.keywords.some(keyword => 
+                    addressLower.includes(keyword.toLowerCase())
+                );
+                
+                // Check city match
+                let cityMatch = false;
+                if (community.city) {
+                    cityMatch = cityLower.includes(community.city.toLowerCase());
+                } else if (community.cities) {
+                    cityMatch = community.cities.some(c => cityLower.includes(c.toLowerCase()));
+                }
+                
+                if (hasKeyword && cityMatch) {
+                    return {
+                        isFeatured: true,
+                        category: community.category
+                    };
+                }
+            }
+            
+            return { isFeatured: false, category: null };
         }
 
         // Load Demo Data
