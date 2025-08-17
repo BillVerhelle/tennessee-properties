@@ -820,84 +820,102 @@
         // Load Live Data from Zillow API
         async function loadLiveData() {
             console.log('Loading REAL data from Zillow API...');
-            updateStatus('loading', 'Connecting to Zillow API', 'Searching all of Williamson County, TN...');
+            updateStatus('loading', 'Connecting to Zillow API', 'Searching all cities in Williamson County, TN...');
             
             const startTime = Date.now();
             apiCallCount = 0;
             
-            // Search for ALL of Williamson County, TN
-            const searchQuery = 'Williamson County, TN';
+            // All cities/areas in Williamson County, TN
+            const locations = [
+                'Franklin, TN',
+                'Brentwood, TN', 
+                'College Grove, TN',
+                'Nolensville, TN',
+                'Spring Hill, TN',
+                'Thompsons Station, TN',
+                'Fairview, TN',
+                'Arrington, TN',
+                'Leiper\'s Fork, TN'
+            ];
             
             let allProperties = [];
+            const seenZpids = new Set(); // To avoid duplicates
             
-            try {
-                console.log(`Searching ${searchQuery}...`);
-                
-                // Using propertyExtendedSearch endpoint for actual property listings
-                const url = `https://${API_HOST}/propertyExtendedSearch?location=${encodeURIComponent(searchQuery)}&home_type=Houses&minPrice=2000000&maxPrice=5000000`;
-                
-                // Try with CORS proxy first
-                const proxies = [
-                    'https://corsproxy.io/?',
-                    'https://api.allorigins.win/raw?url=',
-                    ''  // Try direct as last resort
-                ];
-                
-                let success = false;
-                for (const proxy of proxies) {
-                    try {
-                        const response = await fetch(proxy + (proxy ? encodeURIComponent(url) : url), {
-                            method: 'GET',
-                            headers: {
-                                'x-rapidapi-key': API_KEY,
-                                'x-rapidapi-host': API_HOST
-                            }
-                        });
-                        
-                        if (response.ok) {
-                            const data = await response.json();
-                            apiCallCount++;
+            for (const location of locations) {
+                try {
+                    console.log(`Searching ${location}...`);
+                    
+                    // Using propertyExtendedSearch endpoint
+                    const url = `https://${API_HOST}/propertyExtendedSearch?location=${encodeURIComponent(location)}&home_type=Houses&minPrice=2000000&maxPrice=5000000`;
+                    
+                    // Try with CORS proxy first
+                    const proxies = [
+                        'https://corsproxy.io/?',
+                        'https://api.allorigins.win/raw?url=',
+                        ''  // Try direct as last resort
+                    ];
+                    
+                    let success = false;
+                    for (const proxy of proxies) {
+                        try {
+                            const response = await fetch(proxy + (proxy ? encodeURIComponent(url) : url), {
+                                method: 'GET',
+                                headers: {
+                                    'x-rapidapi-key': API_KEY,
+                                    'x-rapidapi-host': API_HOST
+                                }
+                            });
                             
-                            console.log(`Response from ${searchQuery}:`, data);
-                            
-                            // Handle the response based on the actual structure
-                            if (data.props) {
-                                allProperties = allProperties.concat(data.props);
-                                success = true;
-                                break;
-                            } else if (data.results) {
-                                allProperties = allProperties.concat(data.results);
-                                success = true;
-                                break;
-                            } else if (Array.isArray(data)) {
-                                allProperties = allProperties.concat(data);
+                            if (response.ok) {
+                                const data = await response.json();
+                                apiCallCount++;
+                                
+                                console.log(`Response from ${location}:`, data);
+                                
+                                // Handle the response based on the actual structure
+                                let props = [];
+                                if (data.props) {
+                                    props = data.props;
+                                } else if (data.results) {
+                                    props = data.results;
+                                } else if (Array.isArray(data)) {
+                                    props = data;
+                                }
+                                
+                                // Add only unique properties
+                                props.forEach(prop => {
+                                    const zpid = prop.zpid || prop.id || Math.random().toString();
+                                    if (!seenZpids.has(zpid)) {
+                                        seenZpids.add(zpid);
+                                        allProperties.push(prop);
+                                    }
+                                });
+                                
                                 success = true;
                                 break;
                             }
+                        } catch (err) {
+                            console.log(`Proxy ${proxy} failed:`, err);
                         }
-                    } catch (err) {
-                        console.log(`Proxy ${proxy} failed:`, err);
                     }
+                    
+                    if (!success) {
+                        console.log(`Could not fetch data for ${location}`);
+                    }
+                    
+                    // Small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                } catch (error) {
+                    console.error(`Error fetching ${location}:`, error);
                 }
-                
-                if (!success) {
-                    console.log(`Could not fetch data for ${searchQuery}, trying alternative method...`);
-                    // Try alternative search method
-                    loadAlternativeSearch();
-                    return;
-                }
-                
-            } catch (error) {
-                console.error(`Error fetching ${searchQuery}:`, error);
-                loadAlternativeSearch();
-                return;
             }
             
             document.getElementById('responseTime').textContent = `${Date.now() - startTime}ms`;
             document.getElementById('apiCalls').textContent = apiCallCount;
             
             if (allProperties.length > 0) {
-                console.log(`Found ${allProperties.length} properties in Williamson County`);
+                console.log(`Found ${allProperties.length} unique properties in Williamson County`);
                 processZillowData(allProperties);
                 document.getElementById('dataSource').textContent = 'Zillow Live';
                 updateStatus('active', '✅ Live Data Loaded!', `${allProperties.length} properties from Williamson County`);
@@ -907,17 +925,19 @@
             }
         }
 
-        // Alternative search method using different endpoint
+        // Alternative search method using zip codes
         async function loadAlternativeSearch() {
-            console.log('Trying alternative search method...');
-            updateStatus('loading', 'Alternative Search', 'Searching Williamson County properties by zip code...');
+            console.log('Trying alternative search method with zip codes...');
+            updateStatus('loading', 'Zip Code Search', 'Searching all Williamson County zip codes...');
+            
+            const startTime = Date.now();
             
             try {
                 // All zip codes in Williamson County, TN
                 const williamsonZipCodes = [
                     '37046', // College Grove
                     '37067', // Franklin
-                    '37064', // Franklin
+                    '37064', // Franklin (Downtown)
                     '37069', // Franklin
                     '37027', // Brentwood
                     '37024', // Brentwood
@@ -928,8 +948,10 @@
                 ];
                 
                 let allProperties = [];
+                const seenZpids = new Set();
                 
                 for (const zip of williamsonZipCodes) {
+                    console.log(`Searching zip code ${zip}...`);
                     const url = `https://${API_HOST}/propertyByZip?zip=${zip}`;
                     
                     try {
@@ -951,15 +973,33 @@
                                     const price = p.price || p.unformattedPrice || 0;
                                     return price >= 2000000 && price <= 5000000;
                                 });
-                                allProperties = allProperties.concat(filtered);
+                                
+                                // Add only unique properties
+                                filtered.forEach(prop => {
+                                    const zpid = prop.zpid || prop.id || Math.random().toString();
+                                    if (!seenZpids.has(zpid)) {
+                                        seenZpids.add(zpid);
+                                        allProperties.push(prop);
+                                    }
+                                });
+                                
+                                console.log(`Found ${filtered.length} properties in ${zip}`);
                             }
                         }
+                        
+                        // Small delay to avoid rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        
                     } catch (err) {
                         console.log(`Error fetching zip ${zip}:`, err);
                     }
                 }
                 
+                document.getElementById('responseTime').textContent = `${Date.now() - startTime}ms`;
+                document.getElementById('apiCalls').textContent = apiCallCount;
+                
                 if (allProperties.length > 0) {
+                    console.log(`Found ${allProperties.length} total unique properties`);
                     processZillowData(allProperties);
                     document.getElementById('dataSource').textContent = 'Zillow API';
                     updateStatus('active', '✅ Properties Found!', `${allProperties.length} properties in Williamson County`);
