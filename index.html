@@ -948,6 +948,8 @@
         function processZillowData(zillowProps) {
             properties = [];
             
+            console.log('Processing Zillow properties:', zillowProps);
+            
             // Process each property
             zillowProps.forEach((prop, index) => {
                 // Extract data based on various possible field names
@@ -961,7 +963,21 @@
                 const baths = prop.baths || prop.bathrooms || prop.bath || 3;
                 const sqft = prop.area || prop.livingArea || prop.sqft || prop.livingAreaValue || 4000;
                 const imgSrc = prop.imgSrc || prop.image || prop.photoUrl || prop.relaxedImgSrc || '';
-                const detailUrl = prop.detailUrl || prop.url || `https://www.zillow.com/homedetails/${zpid}_zpid/`;
+                // Fix the detail URL to ensure it's absolute
+                let detailUrl = prop.detailUrl || prop.url || '';
+                
+                // If the URL doesn't start with http, make it absolute
+                if (detailUrl && !detailUrl.startsWith('http')) {
+                    detailUrl = 'https://www.zillow.com' + (detailUrl.startsWith('/') ? '' : '/') + detailUrl;
+                } else if (!detailUrl) {
+                    // Fallback URL construction
+                    detailUrl = `https://www.zillow.com/homedetails/${zpid}_zpid/`;
+                }
+                
+                // Log to debug
+                if (index < 3) {
+                    console.log(`Property ${index}: ${address}, URL: ${detailUrl}`);
+                }
                 
                 // Check if it's a featured property
                 const isFeatured = FEATURED_PROPERTIES.some(fp => 
@@ -1009,7 +1025,7 @@
                         yearBuilt: 2020,
                         propertyType: 'Single Family',
                         imageUrl: `https://images.unsplash.com/photo-160059654${2815 + index}-ffad4c1539a9?w=800&q=80`,
-                        detailUrl: `https://www.zillow.com/homes/${fp.city}-TN-${fp.zip}/`,
+                        detailUrl: `https://www.zillow.com/homes/${encodeURIComponent(fp.address + ' ' + fp.city + ' TN ' + fp.zip)}_rb/`,
                         isFeatured: true,
                         isNew: index < 3,
                         hasOpenHouse: fp.openHouse || false,
@@ -1076,7 +1092,7 @@
                     yearBuilt: 2018 + Math.floor(Math.random() * 6),
                     propertyType: 'Single Family',
                     imageUrl: imageUrls[index % imageUrls.length],
-                    detailUrl: `https://www.zillow.com/homes/${fp.city}-TN-${fp.zip}/`,
+                    detailUrl: `https://www.zillow.com/homes/${encodeURIComponent(fp.address + ' ' + fp.city + ' TN ' + fp.zip)}_rb/`,
                     isFeatured: true,
                     isNew: index < 3,
                     hasOpenHouse: fp.openHouse || false,
@@ -1105,7 +1121,7 @@
                     yearBuilt: 2015 + Math.floor(Math.random() * 9),
                     propertyType: 'Single Family',
                     imageUrl: imageUrls[i % imageUrls.length],
-                    detailUrl: `https://www.zillow.com/homes/${city}-TN-${zip}/`,
+                    detailUrl: `https://www.zillow.com/homes/${encodeURIComponent(address + ' ' + city + ' TN ' + zip)}_rb/`,
                     isFeatured: false,
                     isNew: i < 5,
                     hasOpenHouse: Math.random() > 0.8,
